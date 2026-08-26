@@ -1,0 +1,509 @@
+// Corner IQ — virksomhedens hjerne
+// Datamodellen er en graf: Proces -> Underproces -> Skridt, hvor hvert skridt
+// hænger på de data og systemer det rører. Det er dén graf agenten tænker i.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- Organisation
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  industry    String?
+  createdAt   DateTime     @default(now())
+  users       User[]
+  engagements Engagement[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String
+  title          String?
+  role           String // FDE | PROCESS_OWNER | EMPLOYEE | CUSTOMER_LEAD | PARTNER
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  ownedProcesses Process[]     @relation("ProcessOwner")
+  assignments    SubProcess[]  @relation("SubProcessOwner")
+  interviews     Interview[]
+  loginTokens    LoginToken[]
+  hitlRequests   HitlRequest[]
+}
+
+// Magic-link login: medarbejderen får en mail med et engangslink.
+model LoginToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// ------------------------------------------------------------------ Engagement
+
+// Ét kundeforløb. Sættes op af FDE'en i de to opstartsmøder.
+model Engagement {
+  id             String       @id @default(cuid())
+  name           String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Fase 0 — sat af senior-konsulenten
+  strategicGoals String? // strategiske mål, fritekst
+  processModel   String? // overordnet procesmodel
+  masterDataNote String? // master data & systemplatform
+
+  stage     String   @default("SCOPING") // SCOPING | MAPPING | ANALYSIS | ROADMAP | HANDOFF | TRAINING | LIVE
+  createdAt DateTime @default(now())
+
+  processes     Process[]
+  systems       SystemRef[]
+  dataObjects   DataObject[]
+  businessRoles BusinessRole[]
+  improvements  Improvement[]
+  roadmaps      Roadmap[]
+  brainChats    BrainChat[]
+  hitlRequests  HitlRequest[]
+  reviewCycles  ReviewCycle[]
+}
+
+// En fast rolle i forretningen — en menneskelig aktør, ikke en systembruger.
+// Processkridt udføres af en rolle, ikke af en navngiven person.
+model BusinessRole {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  createdAt    DateTime   @default(now())
+}
+
+// ----------------------------------------------------------- Systemer & data
+
+// Et IT-system i landskabet (ERP, CRM, Excel-ark, ...).
+model SystemRef {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  category     String? // ERP | CRM | BI | Fil | Egenudviklet | Andet
+  isMasterData Boolean    @default(false)
+  // Kan en AI-agent tale direkte med systemet (API, webhook) — eller kræver det et menneske?
+  canAgentConnect Boolean @default(false)
+  notes        String?
+
+  stepLinks StepSystem[]
+  dataLinks DataObject[]
+}
+
+// Et forretningsobjekt der flyder gennem processerne (Ordre, Kunde, Faktura...).
+model DataObject {
+  id             String     @id @default(cuid())
+  engagementId   String
+  engagement     Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  isMasterData   Boolean    @default(false)
+  ownerSystemId  String?
+  ownerSystem    SystemRef? @relation(fields: [ownerSystemId], references: [id])
+
+  stepLinks StepData[]
+}
+
+// ------------------------------------------------------------------ Processer
+
+// En end-to-end proces, fx "Order to Cash".
+model Process {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  // Procesmodellen: kerneprocesser løber gennem forretningen, støtteprocesser bærer dem.
+  category     String  @default("CORE") // CORE | SUPPORT
+  startEvent   String? // hvor starter e2e-processen
+  endEvent     String? // hvor slutter den
+  ownerId      String?
+  owner        User?      @relation("ProcessOwner", fields: [ownerId], references: [id])
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  subProcesses SubProcess[]
+  improvements Improvement[]
+  aiosLinks    AiosProcessLink[]
+}
+
+// En underproces som én medarbejder kan interviewes om.
+model SubProcess {
+  id          String  @id @default(cuid())
+  processId   String
+  process     Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  name        String
+  startEvent  String?
+  endEvent    String?
+
+  // Procesejeren afgør om den overhovedet skal dokumenteres
+  inScope     Boolean @default(true)
+  scopeReason String?
+
+  assigneeId String?
+  assignee   User?   @relation("SubProcessOwner", fields: [assigneeId], references: [id])
+
+  status String @default("NOT_STARTED") // NOT_STARTED | INTERVIEW | DRAFT | IN_VALIDATION | VALIDATED | NEEDS_UPDATE
+
+  bpmnXml   String? // BPMN 2.0 som XML — genereret af agenten
+  summary   String? // agentens forretningsresumé
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  steps        ProcessStep[]
+  interviews   Interview[]
+  testCases    TestCase[]
+  validations  Validation[]
+  improvements Improvement[]
+  experts      SubProcessExpert[]
+}
+
+// En medarbejder der er procesekspert på en underproces — modtager interview-mailen.
+// Adskilt fra assignee, fordi flere kan være eksperter på samme underproces.
+model SubProcessExpert {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  name         String
+  email        String
+  invitedAt    DateTime?
+  createdAt    DateTime   @default(now())
+}
+
+// Ét skridt i underprocessen. Bindeleddet mellem proces, data og systemer.
+model ProcessStep {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  actorRole   String? // hvem udfører skridtet
+  stepType    String  @default("TASK") // TASK | DECISION | WAIT | HANDOFF
+  isManual    Boolean @default(true)
+
+  // Workflowet: lane 0 er hovedforløbet, lane 1+ er et parallelt spor.
+  // Et parallelt spor starter fra branchFromId og kan enten sluttes ind i
+  // mergeIntoId (et skridt i hovedforløbet) eller afslutte for sig selv.
+  lane         Int     @default(0)
+  branchFromId String?
+  branchFrom   ProcessStep?  @relation("StepBranch", fields: [branchFromId], references: [id], onDelete: SetNull)
+  branches     ProcessStep[] @relation("StepBranch")
+  mergeIntoId  String?
+  mergeInto    ProcessStep?  @relation("StepMerge", fields: [mergeIntoId], references: [id], onDelete: SetNull)
+  mergedBy     ProcessStep[] @relation("StepMerge")
+
+  // Beslutningsgrundlag og resultat — hvad trinet afgør, og hvad det producerer.
+  decisionCriteria String?
+  output           String?
+
+  // Observationer agenten bruger til flaskehals-analyse
+  frequency      String? // fx "40 gange om dagen"
+  durationMin    Int? // typisk varighed i minutter
+  painPoint      String?
+  sortOrder      Int     @default(0)
+
+  systems StepSystem[]
+  data    StepData[]
+}
+
+model StepSystem {
+  id       String      @id @default(cuid())
+  stepId   String
+  step     ProcessStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  systemId String
+  system   SystemRef   @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  usage    String? // READ | WRITE | BOTH
+
+  @@unique([stepId, systemId])
+}
+
+model StepData {
+  id           String      @id @default(cuid())
+  stepId       String
+  step         ProcessStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  dataObjectId String
+  dataObject   DataObject  @relation(fields: [dataObjectId], references: [id], onDelete: Cascade)
+  direction    String? // INPUT | OUTPUT | BOTH
+
+  @@unique([stepId, dataObjectId])
+}
+
+// ------------------------------------------------------- Interview & validering
+
+// Agentens ~30 min samtale med medarbejderen.
+model Interview {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status      String    @default("OPEN") // OPEN | COMPLETED
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  messages InterviewMessage[]
+  notes    InterviewNote[]
+}
+
+model InterviewMessage {
+  id          String    @id @default(cuid())
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  role        String // agent | user
+  content     String
+  createdAt   DateTime  @default(now())
+}
+
+// Det agenten fandt værd at huske — ekstra kontekst til virksomhedens hjerne.
+model InterviewNote {
+  id          String    @id @default(cuid())
+  interviewId String
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  category    String // PAIN | WORKAROUND | RISK | KNOWLEDGE | OPPORTUNITY
+  content     String
+  importance  Int       @default(2) // 1-3
+  createdAt   DateTime  @default(now())
+}
+
+model Validation {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  validatorId  String
+  validatorRole String // PROCESS_OWNER | EMPLOYEE
+  verdict      String // APPROVED | CHANGES_REQUESTED
+  comment      String?
+  createdAt    DateTime   @default(now())
+}
+
+// ---------------------------------------------------- Forbedringer & AIOS
+
+// En flaskehals agenten har fundet.
+model Improvement {
+  id           String      @id @default(cuid())
+  engagementId String
+  engagement   Engagement  @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  processId    String?
+  process      Process?    @relation(fields: [processId], references: [id])
+  subProcessId String?
+  subProcess   SubProcess? @relation(fields: [subProcessId], references: [id])
+
+  title       String
+  bottleneck  String // hvad er flaskehalsen
+  // De tre muligheder: gør det helt anderledes / gør det bedre / gør det i højere volumen
+  lever       String // DIFFERENT | IMPROVE | VOLUME
+  isCrossProcess Boolean @default(false)
+  rationale   String?
+  evidence    String? // JSON: kilder — websøgning, konsulent-log, interviewnoter
+
+  createdAt DateTime       @default(now())
+  proposals AiosProposal[]
+}
+
+// Et konkret AIOS-system/agent der kan bygges oven på processen.
+model AiosProposal {
+  id            String      @id @default(cuid())
+  improvementId String
+  improvement   Improvement @relation(fields: [improvementId], references: [id], onDelete: Cascade)
+
+  name        String
+  layer       String  @default("PROCESS") // PROCESS = ét procesområde | ORCHESTRATION = binder e2e sammen
+  description String
+  howItWorks  String?
+  example     String? // et konkret eksempel på løsningen i brug — fortalt som et hændelsesforløb
+  roiEstimate String? // det forventede afkast, i grove tal — ikke en detaljeret businesscase
+  systemsUsed String? // JSON-liste af system-navne
+  dataUsed    String? // JSON-liste af dataobjekt-navne
+
+  // Pick-matrix
+  scoreStrategic  Int? // 1-5 — relevans ift. strategiske mål
+  scoreImpact     Int? // 1-5
+  scoreFeasibility Int? // 1-5
+  scoredBy        String? // hvem satte scoren
+  selected        Boolean @default(false)
+
+  sourceKind String? // WEB_CASE | CONSULTANT_LOG | AGENT
+  sourceRef  String?
+
+  createdAt     DateTime       @default(now())
+  roadmapItems  RoadmapItem[]
+  testCases     TestCase[]
+  processLinks  AiosProcessLink[]
+}
+
+// Hvilke e2e-processer et AIOS-forslag understøtter — mange til mange, for et
+// forslag rører ofte flere processer, og en proces kan understøttes af flere.
+model AiosProcessLink {
+  id         String       @id @default(cuid())
+  proposalId String
+  proposal   AiosProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  processId  String
+  process    Process      @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, processId])
+}
+
+// Konsulenternes egen log over AI-løsninger/teknologier — agentens opslagsværk.
+model ConsultantLogEntry {
+  id          String   @id @default(cuid())
+  title       String
+  technology  String
+  problemType String // hvilken slags flaskehals den løser
+  description String
+  outcome     String? // hvad kunden fik ud af det
+  tags        String? // JSON-liste
+  createdAt   DateTime @default(now())
+}
+
+// --------------------------------------------------------- Roadmap & partner
+
+model Roadmap {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  title        String
+  summary      String?
+
+  status     String    @default("DRAFT") // DRAFT | CONSULTANT_REVIEW | APPROVED | SENT
+  approvedBy String?
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  items    RoadmapItem[]
+  partners PartnerSuggestion[]
+}
+
+model RoadmapItem {
+  id         String       @id @default(cuid())
+  roadmapId  String
+  roadmap    Roadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  proposalId String?
+  proposal   AiosProposal? @relation(fields: [proposalId], references: [id])
+
+  phase       String // NOW | NEXT | LATER
+  title       String
+  // Materialet en udvikler skal kunne bygge ud fra
+  devBrief    String?
+  openQuestions String? // JSON — det kunden mangler at svare på
+  sortOrder   Int      @default(0)
+}
+
+model PartnerSuggestion {
+  id        String  @id @default(cuid())
+  roadmapId String
+  roadmap   Roadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  name       String
+  website    String?
+  rationale  String
+  strengths  String? // JSON-liste
+  fitScore   Int? // 1-5
+  chosen     Boolean @default(false)
+  // Kanban-status i selektionen: START | SELECTION_1 | SELECTION_2 | CHOSEN
+  stage      String  @default("START")
+}
+
+// ------------------------------------------------------------------ Test & træning
+
+// Genereres ud fra processen. Bruges først til at godkende partnerens leverance,
+// derefter som træningsmateriale.
+model TestCase {
+  id           String        @id @default(cuid())
+  subProcessId String?
+  subProcess   SubProcess?   @relation(fields: [subProcessId], references: [id])
+  proposalId   String?
+  proposal     AiosProposal? @relation(fields: [proposalId], references: [id])
+
+  title           String
+  given           String
+  when            String
+  then            String
+  usedForTraining Boolean @default(true)
+  createdAt       DateTime @default(now())
+}
+
+// ------------------------------------------------------- Hjernen & løbende drift
+
+// Samtale med virksomhedens hjerne — agenten der kender hele grafen.
+model BrainChat {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  title        String     @default("Ny samtale")
+  createdAt    DateTime   @default(now())
+  messages     BrainMessage[]
+}
+
+model BrainMessage {
+  id        String    @id @default(cuid())
+  chatId    String
+  chat      BrainChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String // user | assistant
+  content   String
+  citations String? // JSON — hvilke processer/skridt svaret bygger på
+  createdAt DateTime  @default(now())
+}
+
+// Løbende forbedringslogging fra medarbejdere i driften.
+model ImprovementLog {
+  id           String   @id @default(cuid())
+  engagementId String
+  subProcessId String?
+  submittedBy  String
+  content      String
+  status       String   @default("NEW") // NEW | REVIEWED | CONVERTED | CLOSED
+  createdAt    DateTime @default(now())
+}
+
+// Processer beskriver hvad der gøres i dag — derfor et kvartalsvist eftersyn.
+model ReviewCycle {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  dueDate      DateTime
+  status       String     @default("OPEN") // OPEN | COMPLETED
+  createdAt    DateTime   @default(now())
+  items        ReviewItem[]
+}
+
+model ReviewItem {
+  id            String      @id @default(cuid())
+  reviewCycleId String
+  reviewCycle   ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
+  subProcessId  String
+  needsUpdate   Boolean?    // procesejeren krydser af
+  note          String?
+}
+
+// Kunden kan altid række ud efter en rigtig konsulent.
+model HitlRequest {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  requesterId  String
+  requester    User       @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  context      String? // hvor i systemet spørgsmålet kom fra
+  question     String
+  status       String     @default("OPEN") // OPEN | ANSWERED
+  answer       String?
+  createdAt    DateTime   @default(now())
+}

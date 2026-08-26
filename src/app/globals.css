@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+/*
+  Corner IQ — designsprog
+
+  Papir, ikke skærm. Varm råhvid flade med et strejf af ler i sig. Hårfine
+  linjer i stedet for kasser. Brændt orange som eneste accent, brugt sparsomt.
+  Typografien bærer hierarkiet — farverne bekræfter det bare.
+*/
+
+@theme {
+  /*
+    Ren hvid flade, ingen ramme, ingen kasser. Adskillelsen kommer fra
+    hvidrum, hårfine linjer og typografisk vægt. Det stiller krav til
+    rytmen: bliver afstanden mellem sektioner for lille, falder siden
+    sammen, for der er intet andet til at holde dem fra hinanden.
+  */
+  --color-surface: #ffffff; /* siden selv */
+  --color-raised: #faf7f3; /* svagt tonet felt */
+  --color-sunken: #f4efe9;
+  --color-line: #e4dbd0; /* den synlige linje */
+  --color-line-soft: #f0e9e1; /* den næsten usynlige */
+
+  --color-text: #241c17; /* varm mørkebrun, aldrig sort */
+  --color-muted: #6b5a4c;
+  --color-faint: #96826e;
+
+  --color-clay: #e35f1e; /* accenten: mættet orange, som referencens containerfarve */
+  --color-clay-soft: #f0894a;
+  --color-clay-wash: #fdf0e6;
+  --color-clay-line: #f6c9a4;
+
+  --color-ok: #4f7c52;
+  --color-warn: #b8801f;
+  --color-alert: #b3462f;
+
+  /* Den anden accent: ægte sort, brugt kun til den ene primære handling på
+     en skærm — send, bekræft. Orange er mærket, sort er "gør det nu". */
+  --color-ink: #14100c;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: Cambria, Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+}
+
+/* Tal og koder skal flugte i tabeller */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sektionsoverskrift: lille, spærret, dæmpet — monospace, som referencens tekniske labels */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+::selection {
+  background: var(--color-clay-line);
+  color: var(--color-text);
+}
+
+/* Diskret scrollbar — vi vil ikke se den arbejde */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+/*
+  Procesmodellens felter er de eneste elementer der stadig har form — de er
+  et diagram, ikke en beholder. Skyggen er varm; en grå skygge dræber paletten.
+*/
+.lift {
+  box-shadow: 0 1px 3px rgba(60, 40, 24, 0.08);
+}
+
+.lift-hover {
+  transition:
+    box-shadow 0.16s ease,
+    transform 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.lift-hover:hover {
+  box-shadow: 0 6px 18px rgba(60, 40, 24, 0.12);
+  transform: translateY(-2px);
+}
+
+/*
+  Hero-tallet. Decimalerne dæmpes, så øjet lander på størrelsesordenen først
+  og detaljen bagefter.
+*/
+.hero-number {
+  font-family: var(--font-mono);
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-number .dim {
+  color: var(--color-faint);
+}
+
+/*
+  Prikmønstret fra referencerne — teknisk tekstur bag et nøgletal, aldrig en
+  ramme. Prikkerne er varme, ikke grå, så de hører til paletten.
+*/
+.dot-grid {
+  background-image: radial-gradient(var(--color-clay-line) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+/* ---- BPMN-lærredet klædt i vores palet ---- */
+.bpmn-host {
+  background: transparent;
+}
+
+.bpmn-host .djs-container svg {
+  background: transparent;
+}
+
+.bpmn-host .bjs-powered-by {
+  display: none;
+}
+
+/* Paletten (figurer/pile) er kun til gene i den skrivebeskyttede visning */
+.bpmn-host .djs-palette {
+  display: none;
+}
+
+.bpmn-editable .bpmn-host .djs-palette {
+  display: block;
+  border-radius: 8px;
+  border-color: var(--color-line);
+  box-shadow: 0 1px 3px rgba(60, 40, 24, 0.1);
+}
+
+/*
+  Kontekst-boksene (Input/Output kontekst) tegnes af vores egen renderer
+  (bpmnCustomRenderer.ts) med deres egen sorte kant — den varme brune farve
+  herunder er kun for de almindelige BPMN-figurer, ikke vores.
+*/
+.bpmn-host
+  .djs-element:not([data-element-id^="CtxIn_"]):not([data-element-id^="CtxOut_"])
+  .djs-visual
+  > :nth-child(1) {
+  stroke: #6b5a4c !important;
+}
+
+.bpmn-host .djs-visual > text tspan {
+  fill: var(--color-text) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+}

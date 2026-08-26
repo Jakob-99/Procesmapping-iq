@@ -1,0 +1,113 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { requireEngagement } from "@/lib/engagement";
+import { ensureLoginCode } from "@/lib/interview-auth";
+
+// Procesejeren opretter en ny end-to-end proces i procesmodellen — kerne eller støtte.
+export async function createProcess(name: string, category: "CORE" | "SUPPORT") {
+  if (!name.trim()) return;
+  const engagement = await requireEngagement();
+  const last = await db.process.findFirst({
+    where: { engagementId: engagement.id },
+    orderBy: { sortOrder: "desc" },
+  });
+  await db.process.create({
+    data: {
+      engagementId: engagement.id,
+      name: name.trim(),
+      category,
+      sortOrder: (last?.sortOrder ?? -1) + 1,
+    },
+  });
+  revalidatePath("/processes");
+}
+
+// Procesejeren opretter underprocessen med start og slut — resten (skridt,
+// interview) kommer først bagefter, når medarbejderen er interviewet.
+export async function createSubProcess(
+  processId: string,
+  name: string,
+  startEvent?: string,
+  endEvent?: string,
+) {
+  if (!name.trim()) return;
+  const last = await db.subProcess.findFirst({
+    where: { processId },
+    orderBy: { sortOrder: "desc" },
+  });
+  await db.subProcess.create({
+    data: {
+      processId,
+      name: name.trim(),
+      startEvent: startEvent?.trim() || null,
+      endEvent: endEvent?.trim() || null,
+      sortOrder: (last?.sortOrder ?? -1) + 1,
+    },
+  });
+  revalidatePath(`/processes`);
+}
+
+// Procesejeren trækker selv rundt på kortene i procesmodellen — rækkefølgen
+// (og dermed venstre/højre, top/bund i grid'et) er bare sortOrder.
+export async function reorderProcesses(ids: string[]) {
+  await db.$transaction(
+    ids.map((id, index) => db.process.update({ where: { id }, data: { sortOrder: index } })),
+  );
+  revalidatePath("/processes");
+}
+
+// Sletter en e2e-proces og alle dens underprocesser, skridt, interviews m.v.
+// (cascader via schemaet). Forbedringer og testcases der peger på processen
+// eller dens underprocesser har ingen cascade — de løsrives i stedet for at
+// slettes med, så forbedringslogikken ikke mister historik ved en fejl.
+export async function deleteProcess(processId: string) {
+  const subProcesses = await db.subProcess.findMany({
+    where: { processId },
+    select: { id: true },
+  });
+  const subIds = subProcesses.map((s) => s.id);
+
+  await db.improvement.updateMany({
+    where: { OR: [{ processId }, { subProcessId: { in: subIds } }] },
+    data: { processId: null, subProcessId: null },
+  });
+  if (subIds.length) {
+    await db.testCase.updateMany({
+      where: { subProcessId: { in: subIds } },
+      data: { subProcessId: null },
+    });
+  }
+
+  await db.process.delete({ where: { id: processId } });
+  revalidatePath("/processes");
+}
+
+// Sender interview-invitationen til samtlige procesksperter på tværs af alle
+// underprocesser i denne e2e-proces — ikke kun én underproces ad gangen.
+export async function sendInterviewToProcessExperts(processId: string) {
+  const experts = await db.subProcessExpert.findMany({
+    where: { subProcess: { processId } },
+  });
+
+  await db.subProcessExpert.updateMany({
+    where: { id: { in: experts.map((e) => e.id) } },
+    data: { invitedAt: new Date() },
+  });
+
+  // Samme mail kan optræde flere gange (ekspert på flere underprocesser) —
+  // koden er den samme for personen på tværs, så vi genbruger den pr. mail.
+  const codeByEmail = new Map<string, string | null>();
+  for (const e of experts) {
+    if (!codeByEmail.has(e.email)) {
+      codeByEmail.set(e.email, await ensureLoginCode(e.email));
+    }
+    console.log(
+      `[interview-invite] Til: ${e.email} — "Du er inviteret til et interview." Link: /interviews/login — Kode: ${codeByEmail.get(e.email) ?? "(ingen bruger med den mail)"}`,
+    );
+  }
+
+  revalidatePath(`/processes`);
+  return experts.length;
+}
