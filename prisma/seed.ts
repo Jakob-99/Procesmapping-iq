@@ -9,6 +9,7 @@ const db = new PrismaClient();
 async function main() {
   await db.organization.deleteMany();
   await db.consultantLogEntry.deleteMany();
+  await db.consultant.deleteMany();
 
   const org = await db.organization.create({
     data: { name: "Nordvest Industri A/S", industry: "Produktion og engros" },
@@ -63,6 +64,41 @@ async function main() {
     mk("Outlook", "Mail", false, "Ordrer og godkendelser flyder stadig via mail.", false),
     mk("Excel — Ordreoverblik", "Fil", false, "Sofies eget regneark. Findes ikke officielt.", false),
     mk("Power BI", "BI", false, "Ledelsesrapportering, opdateres ugentligt.", false),
+  ]);
+
+  // AI-parathed pr. system — eksempeldata til AI-parathedsrapporten (/landscape/readiness).
+  await Promise.all([
+    db.systemRef.update({
+      where: { id: nav.id },
+      data: {
+        hasOpenApi: true,
+        masterDataQuality: "GOOD",
+        processesUpToDate: true,
+        readinessNotes: "OData-API med tilbageskrivning. Varekartotek og kundedata holdes rent af bogholderiet.",
+      },
+    }),
+    db.systemRef.update({
+      where: { id: hubspot.id },
+      data: { hasOpenApi: true, masterDataQuality: "GOOD", processesUpToDate: true },
+    }),
+    db.systemRef.update({
+      where: { id: wms.id },
+      data: {
+        hasOpenApi: false,
+        masterDataQuality: "GOOD",
+        processesUpToDate: false,
+        readinessNotes: "Varenumre er konsistente, da de synkes fra NAV — men kun natligt. Ingen realtids-API, lagerbevægelser eftertastes.",
+      },
+    }),
+    db.systemRef.update({
+      where: { id: excel.id },
+      data: {
+        hasOpenApi: false,
+        masterDataQuality: "POOR",
+        processesUpToDate: false,
+        readinessNotes: "Findes ikke officielt — intet API, ingen governance, ajourføres manuelt af Sofie.",
+      },
+    }),
   ]);
 
   // ------------------------------------------------------------ dataobjekter
@@ -546,6 +582,32 @@ async function main() {
         sourceKind: "CONSULTANT_LOG",
         systemsUsed: JSON.stringify(["Microsoft Dynamics NAV", "Outlook"]),
         dataUsed: JSON.stringify(["Salgsordre", "Kunde", "Vare"]),
+        rolesAffected: JSON.stringify(["Ordrebehandler"]),
+        strategicGoal: "2) Vokse 30% i omsætning uden at øge administrationen.",
+        requiresSystem: true,
+        buildsInto: JSON.stringify(["INTERNAL_PROCESS"]),
+        resourceReadiness: "READY",
+        resourceNotes: "Sofie kan drive godkendelseslisten fra dag ét — det kræver ingen nye kompetencer, kun at IT sætter API-adgangen til NAV op.",
+        systemFunctions: JSON.stringify([
+          { block: "MODEL", description: "Claude, valgt for stærk tekstforståelse af fri, ustruktureret mailtekst." },
+          { block: "ONTOLOGY", description: "Salgsordren og dens linjer — varenummer, antal, leveringsdato, kunde." },
+          {
+            block: "CONTEXT",
+            description:
+              "Input: den indkommende mail. Viden: varekartotek og kundens ordrehistorik i NAV. Hukommelse: hvilke mails der allerede er behandlet.",
+          },
+          { block: "SKILLS", description: "Udtrække ordrelinjer af fri tekst og matche dem til varenumre i kartoteket." },
+          { block: "TOOLS", description: "Skriveadgang til NAV via API for at oprette kladdeordrer." },
+          { block: "TRIGGER", description: "Ny mail lander i den fælles ordrepostkasse." },
+          { block: "GOALS", description: "Mindst 80% af ordrelinjer oprettet uden manuel indtastning." },
+          { block: "INTERFACE", description: "En kort godkendelsesliste Sofie klikker igennem for de usikre linjer." },
+        ]),
+        toBeSteps: JSON.stringify([
+          { name: "Mail modtaget", actorRole: "", isAi: false, description: "Ordre lander i fællespostkassen." },
+          { name: "Ordrelinjer udtrukket", actorRole: "Ordrebehandler", isAi: true, description: "Agenten matcher varer og opretter kladdeordre." },
+          { name: "Usikre linjer godkendes", actorRole: "Ordrebehandler", isAi: false, description: "Ét klik pr. linje agenten er i tvivl om." },
+          { name: "Ordre oprettet i NAV", actorRole: "", isAi: true, description: "" },
+        ]),
       },
     }),
     db.aiosProposal.create({
@@ -574,6 +636,26 @@ async function main() {
         sourceKind: "WEB_CASE",
         systemsUsed: JSON.stringify(["Microsoft Dynamics NAV"]),
         dataUsed: JSON.stringify(["Faktura", "Salgsordre"]),
+        rolesAffected: JSON.stringify(["Bogholder"]),
+        strategicGoal: "1) Halvere gennemløbstiden fra ordre til levering inden udgangen af 2027.",
+        requiresSystem: true,
+        buildsInto: JSON.stringify(["INTERNAL_PROCESS"]),
+        resourceReadiness: "PARTIAL",
+        resourceNotes: "Louise kan drive afvigelseslisten dagligt, men der mangler en teknisk ressource til at vedligeholde NAV-integrationen — bør allokeres fra IT eller en ekstern partner.",
+        systemFunctions: JSON.stringify([
+          { block: "ONTOLOGY", description: "Indkøbsordren og den tilhørende leverandørfaktura, linje for linje." },
+          { block: "CONTEXT", description: "Input: den modtagne faktura. Viden: den bagvedliggende indkøbsordre i NAV." },
+          { block: "SKILLS", description: "Sammenligne linjer, antal og pris mellem faktura og ordre." },
+          { block: "TOOLS", description: "Bogføring direkte i NAV når alt matcher." },
+          { block: "TRIGGER", description: "Leverandørfaktura modtaget." },
+          { block: "INTERFACE", description: "Afvigelsen fremhævet til bogholderen — ikke hele fakturaen forfra." },
+        ]),
+        toBeSteps: JSON.stringify([
+          { name: "Faktura modtaget", actorRole: "", isAi: false, description: "" },
+          { name: "Matchet mod indkøbsordre", actorRole: "Bogholder", isAi: true, description: "Linjer, antal og pris sammenlignes." },
+          { name: "Afvigelse gennemgås", actorRole: "Bogholder", isAi: false, description: "Kun ved uoverensstemmelse." },
+          { name: "Bogført", actorRole: "", isAi: true, description: "" },
+        ]),
       },
     }),
   ]);
@@ -586,21 +668,22 @@ async function main() {
     ],
   });
 
-  // -------------------------------------------------------------------- roadmap
-  const roadmap = await db.roadmap.create({
-    data: {
-      engagementId: engagement.id,
-      title: "Roadmap — AI-native transformation 2026",
-      status: "DRAFT",
-    },
-  });
-
-  await db.partnerSuggestion.createMany({
+  await db.consultant.createMany({
     data: [
-      { roadmapId: roadmap.id, name: "Nordic AI Partners", rationale: "Erfaring med ERP-integration mod NAV.", fitScore: 4, stage: "START" },
-      { roadmapId: roadmap.id, name: "FlowState", rationale: "Specialiseret i dokumentudtræk og LLM-agenter.", fitScore: 5, stage: "SELECTION_1" },
-      { roadmapId: roadmap.id, name: "Byggerne A/S", rationale: "Bred systemintegrator, mindre AI-specifik erfaring.", fitScore: 3, stage: "SELECTION_2" },
-      { roadmapId: roadmap.id, name: "Cornerstones Build", rationale: "Kender allerede virksomheden fra kortlægningen.", fitScore: 5, stage: "CHOSEN", chosen: true },
+      {
+        name: "Jakob Breum Møller",
+        bio: "Senior konsulent hos Cornerstones — FDE på dette forløb, kender scoping og roadmap bedst.",
+        email: "jakob@cornerstones.dk",
+        phone: "+45 20 12 34 56",
+        sortOrder: 0,
+      },
+      {
+        name: "Ida Werner",
+        bio: "AIOS-arkitekt hos Cornerstones — bygger forslagene der kommer ud af kortlægningen.",
+        email: "ida.werner@cornerstones.dk",
+        phone: "+45 30 45 67 89",
+        sortOrder: 1,
+      },
     ],
   });
 

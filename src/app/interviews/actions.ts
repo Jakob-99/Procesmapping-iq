@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 
 const COOKIE = "interview_uid";
@@ -70,4 +71,30 @@ export async function completeInterview(interviewId: string) {
     where: { id: interviewId },
     data: { status: "COMPLETED", completedAt: new Date() },
   });
+}
+
+// Medarbejderen kan løbende melde et forbedringsønske ind fra interviewsiden —
+// vises samme sted som resten af underprocessens indsigter (InsightsPanel),
+// ikke gemt væk i en separat driftslog.
+export async function submitImprovementLog(
+  subProcessId: string,
+  submittedBy: string,
+  content: string,
+) {
+  if (!content.trim()) return;
+  const sp = await db.subProcess.findUnique({
+    where: { id: subProcessId },
+    select: { processId: true, process: { select: { engagementId: true } } },
+  });
+  if (!sp) return;
+
+  await db.improvementLog.create({
+    data: {
+      engagementId: sp.process.engagementId,
+      subProcessId,
+      submittedBy,
+      content: content.trim(),
+    },
+  });
+  revalidatePath(`/processes/${sp.processId}/${subProcessId}`);
 }

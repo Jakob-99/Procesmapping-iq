@@ -55,9 +55,9 @@ export default async function ImprovementsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Fase 3"
-        title="Forbedringer"
-        lead="Forslag til hvordan AIOS-systemer kan understøtte forretningen — fundet af agenten i det der er kortlagt."
+        eyebrow="Innovation"
+        title="Optimering"
+        lead="Forbedringsrapporter — måder AIOS-systemer og andre løsninger kan forbedre de kortlagte processer, fundet af agenten."
       />
 
       <div className="space-y-5 p-8">
@@ -68,7 +68,7 @@ export default async function ImprovementsPage() {
           <Stat label="Orkestreringslag" value={orchestration} hint="på tværs af flere e2e-processer" />
         </div>
 
-        <Panel eyebrow="Løsninger" title="AIOS-forslag" bodyClass="pt-1">
+        <Panel eyebrow="Løsninger" title="Forbedringsrapporter" bodyClass="pt-1">
           {proposals.length === 0 ? (
             <Empty>Ingen flaskehalse fundet endnu.</Empty>
           ) : (

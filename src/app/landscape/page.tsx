@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
-import { Empty } from "@/components/ui";
+import { Empty, OutlineButton } from "@/components/ui";
 import { SystemCreator } from "@/components/SystemCreator";
 import { SystemCard } from "@/components/SystemCard";
 
@@ -31,7 +32,12 @@ export default async function LandscapePage() {
       />
 
       <div className="p-8">
-        <SystemCreator />
+        <div className="mb-4 flex items-center justify-between">
+          <SystemCreator />
+          <Link href="/landscape/readiness">
+            <OutlineButton>Se AI-parathedsrapport →</OutlineButton>
+          </Link>
+        </div>
         {systems.length === 0 ? (
           <Empty>Ingen systemer kortlagt endnu.</Empty>
         ) : (

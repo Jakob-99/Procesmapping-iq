@@ -72,7 +72,6 @@ model Engagement {
   dataObjects   DataObject[]
   businessRoles BusinessRole[]
   improvements  Improvement[]
-  roadmaps      Roadmap[]
   brainChats    BrainChat[]
   hitlRequests  HitlRequest[]
   reviewCycles  ReviewCycle[]
@@ -102,6 +101,15 @@ model SystemRef {
   // Kan en AI-agent tale direkte med systemet (API, webhook) — eller kræver det et menneske?
   canAgentConnect Boolean @default(false)
   notes        String?
+
+  // AI-parathed — de tre forudsætninger for at et systemfundament er
+  // berettiget til AI native (se lib/readiness.ts): åbne API'er der kan
+  // læse OG skrive, ren og konsistent stamdata, og løbende (ikke efterslæbt)
+  // opdatering af data i systemet.
+  hasOpenApi        Boolean @default(false)
+  masterDataQuality String? // GOOD | PARTIAL | POOR
+  processesUpToDate Boolean @default(false)
+  readinessNotes    String?
 
   stepLinks StepSystem[]
   dataLinks DataObject[]
@@ -169,10 +177,10 @@ model SubProcess {
 
   steps        ProcessStep[]
   interviews   Interview[]
-  testCases    TestCase[]
   validations  Validation[]
   improvements Improvement[]
   experts      SubProcessExpert[]
+  updatePolicy UpdatePolicy?
 }
 
 // En medarbejder der er procesekspert på en underproces — modtager interview-mailen.
@@ -333,6 +341,29 @@ model AiosProposal {
   roiEstimate String? // det forventede afkast, i grove tal — ikke en detaljeret businesscase
   systemsUsed String? // JSON-liste af system-navne
   dataUsed    String? // JSON-liste af dataobjekt-navne
+  rolesAffected String? // JSON-liste af rollenavne der berøres
+
+  // Forbedringsrapporten: rapporter handler udelukkende om at forbedre
+  // EKSISTERENDE processer gennem AIOS-systemer og andre løsninger — ikke om
+  // at redesigne organisationen eller opfinde nye værditilbud.
+  strategicGoal   String? // en linje fra Engagement.strategicGoals forslaget hjælper på
+  requiresSystem  Boolean @default(false)
+  // JSON-liste [{ block, description }] — funktionerne i det AIOS-system der
+  // skal bygges, kategoriseret efter AIOS-byggestenene (se lib/aios.ts). Kun
+  // relevant når requiresSystem er sat.
+  systemFunctions String?
+  // JSON-liste [{ name, actorRole, isAi, description }] — et forenklet
+  // to-be-procesforløb der vises som en HTML-flow i rapporten.
+  toBeSteps       String?
+
+  // Hvor bygges AIOS-systemet ind — i hvordan forretningen selv arbejder, i
+  // det kunderne allerede køber, eller begge? JSON-liste, se BUILD_TARGETS i
+  // lib/aios.ts.
+  buildsInto String?
+  // Har virksomheden ressourcerne og kompetencerne til rent faktisk at bygge
+  // og drive dette? Et Fit/Gap-blik, ikke kun om løsningen er en god idé.
+  resourceReadiness String? // READY | PARTIAL | GAP
+  resourceNotes     String?
 
   // Pick-matrix
   scoreStrategic  Int? // 1-5 — relevans ift. strategiske mål
@@ -345,8 +376,6 @@ model AiosProposal {
   sourceRef  String?
 
   createdAt     DateTime       @default(now())
-  roadmapItems  RoadmapItem[]
-  testCases     TestCase[]
   processLinks  AiosProcessLink[]
 }
 
@@ -372,73 +401,6 @@ model ConsultantLogEntry {
   outcome     String? // hvad kunden fik ud af det
   tags        String? // JSON-liste
   createdAt   DateTime @default(now())
-}
-
-// --------------------------------------------------------- Roadmap & partner
-
-model Roadmap {
-  id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  title        String
-  summary      String?
-
-  status     String    @default("DRAFT") // DRAFT | CONSULTANT_REVIEW | APPROVED | SENT
-  approvedBy String?
-  approvedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  items    RoadmapItem[]
-  partners PartnerSuggestion[]
-}
-
-model RoadmapItem {
-  id         String       @id @default(cuid())
-  roadmapId  String
-  roadmap    Roadmap      @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
-  proposalId String?
-  proposal   AiosProposal? @relation(fields: [proposalId], references: [id])
-
-  phase       String // NOW | NEXT | LATER
-  title       String
-  // Materialet en udvikler skal kunne bygge ud fra
-  devBrief    String?
-  openQuestions String? // JSON — det kunden mangler at svare på
-  sortOrder   Int      @default(0)
-}
-
-model PartnerSuggestion {
-  id        String  @id @default(cuid())
-  roadmapId String
-  roadmap   Roadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
-
-  name       String
-  website    String?
-  rationale  String
-  strengths  String? // JSON-liste
-  fitScore   Int? // 1-5
-  chosen     Boolean @default(false)
-  // Kanban-status i selektionen: START | SELECTION_1 | SELECTION_2 | CHOSEN
-  stage      String  @default("START")
-}
-
-// ------------------------------------------------------------------ Test & træning
-
-// Genereres ud fra processen. Bruges først til at godkende partnerens leverance,
-// derefter som træningsmateriale.
-model TestCase {
-  id           String        @id @default(cuid())
-  subProcessId String?
-  subProcess   SubProcess?   @relation(fields: [subProcessId], references: [id])
-  proposalId   String?
-  proposal     AiosProposal? @relation(fields: [proposalId], references: [id])
-
-  title           String
-  given           String
-  when            String
-  then            String
-  usedForTraining Boolean @default(true)
-  createdAt       DateTime @default(now())
 }
 
 // ------------------------------------------------------- Hjernen & løbende drift
@@ -492,6 +454,50 @@ model ReviewItem {
   subProcessId  String
   needsUpdate   Boolean?    // procesejeren krydser af
   note          String?
+}
+
+// Styrer om og hvornår agenten selv skal holde øje med om en underproces'
+// materiale trænger til et eftersyn, og om den i så fald selv må sende en
+// påmindelse ud til den tildelte medarbejder uden om en konsulent.
+model UpdatePolicy {
+  id            String     @id @default(cuid())
+  subProcessId  String     @unique
+  subProcess    SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  active        Boolean    @default(false)
+  intervalDays  Int        @default(90)
+  autoSendEmail Boolean    @default(false)
+  lastCheckedAt DateTime?
+  lastEmailAt   DateTime?
+  createdAt     DateTime   @default(now())
+
+  runs UpdateRun[]
+}
+
+// Loggen over hver gang politikken er kørt — hvad agenten fandt, og om den sendte en mail.
+model UpdateRun {
+  id          String       @id @default(cuid())
+  policyId    String
+  policy      UpdatePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  ranAt       DateTime     @default(now())
+  needsUpdate Boolean
+  finding     String
+  emailSent   Boolean      @default(false)
+  emailTo     String?
+  emailBody   String?
+}
+
+// En rigtig konsulent (Cornerstones' eget team, ikke kundens organisation) man
+// kan kontakte og booke et møde med. Global på tværs af engagements — det er
+// samme konsulentstab uanset hvilken kunde man kigger på.
+model Consultant {
+  id         String   @id @default(cuid())
+  name       String
+  bio        String? // et par linjer om hvem personen er
+  email      String?
+  phone      String?
+  bookingUrl String? // link til at booke et møde (fx Outlook/Calendly)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
 }
 
 // Kunden kan altid række ud efter en rigtig konsulent.

@@ -2,20 +2,23 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { MaterialButtons } from "@/components/MaterialButtons";
-import { Badge, type Tone } from "@/components/ui";
-import { LEVERS, pickScore, proposalGradient } from "@/lib/domain";
+import { ProposalReportEditor } from "@/components/ProposalReportEditor";
+import { ToBeFlow } from "@/components/ToBeFlow";
+import { Badge } from "@/components/ui";
+import { LEVERS, pickScore, proposalGradient, splitEvents } from "@/lib/domain";
 import { splitInsights } from "@/lib/insights";
+import {
+  AIOS_BUILDING_BLOCKS,
+  BUILD_TARGETS,
+  RESOURCE_READINESS_LABELS,
+  parseJsonList,
+  type BuildTarget,
+  type ResourceReadiness,
+  type SystemFunction,
+  type ToBeStep,
+} from "@/lib/aios";
 
 export const dynamic = "force-dynamic";
-
-function parseList(json: string | null) {
-  if (!json) return [] as string[];
-  try {
-    return JSON.parse(json) as string[];
-  } catch {
-    return [];
-  }
-}
 
 export default async function ProposalPage({
   params,
@@ -27,7 +30,7 @@ export default async function ProposalPage({
   const proposal = await db.aiosProposal.findUnique({
     where: { id },
     include: {
-      improvement: { include: { process: true, subProcess: true } },
+      improvement: { include: { engagement: true, process: true, subProcess: true } },
       processLinks: { include: { process: true } },
     },
   });
@@ -52,8 +55,14 @@ export default async function ProposalPage({
   const { works, broken } = splitInsights(notes);
   const potential = pickScore(proposal);
   const lever = LEVERS[proposal.improvement.lever as keyof typeof LEVERS];
-  const systems = parseList(proposal.systemsUsed);
-  const data = parseList(proposal.dataUsed);
+  const systems = parseJsonList<string>(proposal.systemsUsed);
+  const data = parseJsonList<string>(proposal.dataUsed);
+  const roles = parseJsonList<string>(proposal.rolesAffected);
+  const systemFunctions = parseJsonList<SystemFunction>(proposal.systemFunctions);
+  const toBeSteps = parseJsonList<ToBeStep>(proposal.toBeSteps);
+  const buildsInto = parseJsonList<BuildTarget>(proposal.buildsInto);
+  const resourceReadiness = (proposal.resourceReadiness ?? "") as ResourceReadiness | "";
+  const strategicGoalOptions = splitEvents(proposal.improvement.engagement.strategicGoals);
 
   const gradient = proposalGradient(proposal.id);
 
@@ -65,7 +74,7 @@ export default async function ProposalPage({
       >
         <div className="mx-auto w-full max-w-[680px]">
           <div className="eyebrow mb-3 text-white/70">
-            {proposal.layer === "ORCHESTRATION" ? "Orkestreringslag" : "Procesniveau"}
+            Forbedringsrapport · {proposal.layer === "ORCHESTRATION" ? "Orkestreringslag" : "Procesniveau"}
             {lever && ` · ${lever.label}`}
           </div>
           <h1
@@ -96,11 +105,95 @@ export default async function ProposalPage({
               <div className="font-mono text-[28px] font-medium">{proposal.scoreFeasibility ?? "—"}<span className="text-[14px] text-(--color-faint)">/5</span></div>
             </div>
           </div>
-          <MaterialButtons
-            filename={`${proposal.name.replace(/\s+/g, "-").toLowerCase()}.md`}
-            content={`# ${proposal.name}\n\n${proposal.description}\n\n${proposal.howItWorks ? `## Sådan virker det\n${proposal.howItWorks}\n` : ""}`}
-          />
+          <div className="flex items-center gap-2">
+            <ProposalReportEditor
+              proposalId={proposal.id}
+              strategicGoal={proposal.strategicGoal ?? ""}
+              rolesAffected={roles}
+              requiresSystem={proposal.requiresSystem}
+              systemFunctions={systemFunctions}
+              toBeSteps={toBeSteps}
+              buildsInto={buildsInto}
+              resourceReadiness={resourceReadiness}
+              resourceNotes={proposal.resourceNotes ?? ""}
+              strategicGoalOptions={strategicGoalOptions}
+            />
+            <MaterialButtons
+              filename={`${proposal.name.replace(/\s+/g, "-").toLowerCase()}.md`}
+              content={`# ${proposal.name}\n\n${proposal.description}\n\n${proposal.howItWorks ? `## Sådan virker det\n${proposal.howItWorks}\n` : ""}`}
+            />
+          </div>
         </div>
+
+        <section className="mb-10 rounded-lg border border-(--color-line-soft) bg-(--color-raised) p-5">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {buildsInto.map((b) => (
+              <Badge key={b} tone="faint">Bygges ind i: {BUILD_TARGETS[b]?.label ?? b}</Badge>
+            ))}
+            {proposal.strategicGoal && (
+              <span className="text-[12.5px] text-(--color-muted)">
+                hjælper på <span className="font-medium text-(--color-text)">{proposal.strategicGoal}</span>
+              </span>
+            )}
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <div className="mb-2 text-[11px] font-medium text-(--color-faint)">Processer</div>
+              <div className="flex flex-wrap gap-1.5">
+                {proposal.processLinks.length > 0 ? (
+                  proposal.processLinks.map((l) => (
+                    <Link key={l.id} href={`/processes/${l.processId}`}>
+                      <Badge tone="clay">{l.process.name}</Badge>
+                    </Link>
+                  ))
+                ) : (
+                  <span className="text-[12px] text-(--color-faint)">Ingen angivet</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-[11px] font-medium text-(--color-faint)">Roller</div>
+              <div className="flex flex-wrap gap-1.5">
+                {roles.length > 0 ? (
+                  roles.map((r) => (
+                    <Badge key={r} tone="warn">{r}</Badge>
+                  ))
+                ) : (
+                  <span className="text-[12px] text-(--color-faint)">Ingen angivet</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-[11px] font-medium text-(--color-faint)">Systemer</div>
+              <div className="flex flex-wrap gap-1.5">
+                {systems.length > 0 ? (
+                  systems.map((s) => <Badge key={s} tone="muted">{s}</Badge>)
+                ) : (
+                  <span className="text-[12px] text-(--color-faint)">Ingen angivet</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="mb-2 text-[11px] font-medium text-(--color-faint)">Data</div>
+              <div className="flex flex-wrap gap-1.5">
+                {data.length > 0 ? (
+                  data.map((d) => <Badge key={d} tone="faint">{d}</Badge>)
+                ) : (
+                  <span className="text-[12px] text-(--color-faint)">Ingen angivet</span>
+                )}
+              </div>
+            </div>
+          </div>
+          {notes.length > 0 && (
+            <p className="mt-4 border-t border-(--color-line) pt-3 text-[12.5px] text-(--color-faint)">
+              Bygger på {notes.length} indsigter fra kortlægningen —{" "}
+              <a href="#indsigter" className="text-(--color-clay) hover:underline">
+                se dem nedenfor
+              </a>
+              .
+            </p>
+          )}
+        </section>
 
         <p className="text-[17px] leading-relaxed text-(--color-text)">
           {proposal.description}
@@ -137,6 +230,44 @@ export default async function ProposalPage({
           </section>
         )}
 
+        {proposal.requiresSystem && systemFunctions.length > 0 && (
+          <section className="mt-14">
+            <div className="eyebrow mb-3">AIOS-systemet</div>
+            <h2 className="mb-2 text-[24px] font-semibold tracking-tight">Funktioner i systemet</h2>
+            <p className="mb-5 text-[13.5px] text-(--color-faint)">
+              Struktureret efter AIOS-byggestenene — model, kontekst, skills og resten af harnesset omkring modellen.
+            </p>
+            <div className="space-y-4">
+              {systemFunctions.map((f, i) => (
+                <div key={i} className="rounded-lg border border-(--color-line-soft) bg-(--color-surface) p-4">
+                  <div className="mb-1 text-[13px] font-semibold text-(--color-clay)">
+                    {AIOS_BUILDING_BLOCKS[f.block]?.label ?? f.block}
+                  </div>
+                  <p className="text-[13.5px] leading-relaxed text-(--color-muted)">{f.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {(resourceReadiness || proposal.resourceNotes) && (
+          <section className="mt-14">
+            <div className="eyebrow mb-3">Fit/gap</div>
+            <h2 className="mb-2 text-[24px] font-semibold tracking-tight">Ressourcer & kompetencer</h2>
+            <p className="mb-4 text-[13.5px] text-(--color-faint)">
+              Har virksomheden det der skal til for rent faktisk at bygge og drive dette?
+            </p>
+            {resourceReadiness && (
+              <Badge tone={RESOURCE_READINESS_LABELS[resourceReadiness].tone}>
+                {RESOURCE_READINESS_LABELS[resourceReadiness].label}
+              </Badge>
+            )}
+            {proposal.resourceNotes && (
+              <p className="mt-3 text-[15px] leading-[1.8] text-(--color-muted)">{proposal.resourceNotes}</p>
+            )}
+          </section>
+        )}
+
         {proposal.example && (
           <section className="mt-14">
             <div className="eyebrow mb-3">Et eksempel</div>
@@ -151,51 +282,18 @@ export default async function ProposalPage({
           </section>
         )}
 
-        {(proposal.processLinks.length > 0 || systems.length > 0) && (
+        {toBeSteps.length > 0 && (
           <section className="mt-14">
-            <div className="eyebrow mb-3">Hvad det rører</div>
-            <h2 className="mb-5 text-[24px] font-semibold tracking-tight">
-              Berørte processer og systemer
-            </h2>
-            <div className="grid gap-6 sm:grid-cols-2">
-              {proposal.processLinks.length > 0 && (
-                <div>
-                  <div className="mb-2 text-[11.5px] font-medium text-(--color-faint)">Processer</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {proposal.processLinks.map((l) => (
-                      <Link key={l.id} href={`/processes/${l.processId}`}>
-                        <Badge tone="clay">{l.process.name}</Badge>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {systems.length > 0 && (
-                <div>
-                  <div className="mb-2 text-[11.5px] font-medium text-(--color-faint)">Systemer</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {systems.map((s) => (
-                      <Badge key={s} tone="muted">{s}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {data.length > 0 && (
-                <div className="sm:col-span-2">
-                  <div className="mb-2 text-[11.5px] font-medium text-(--color-faint)">Data</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {data.map((d) => (
-                      <Badge key={d} tone="faint">{d}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="eyebrow mb-3">To-be</div>
+            <h2 className="mb-5 text-[24px] font-semibold tracking-tight">Sådan kunne processen se ud</h2>
+            <div className="overflow-x-auto pb-2">
+              <ToBeFlow steps={toBeSteps} />
             </div>
           </section>
         )}
 
         {notes.length > 0 && (
-          <section className="mt-14">
+          <section id="indsigter" className="mt-14 scroll-mt-8">
             <div className="eyebrow mb-3">Fra kortlægningen</div>
             <h2 className="mb-5 text-[24px] font-semibold tracking-tight">Indsigter</h2>
             <div className="grid gap-8 sm:grid-cols-2">

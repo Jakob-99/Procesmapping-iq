@@ -26,6 +26,29 @@ export async function createSystem(
   revalidatePath("/landscape");
 }
 
+// AI-parathedsrapportens grundlag pr. system — redigeres fra /landscape/readiness.
+export async function updateSystemReadiness(
+  id: string,
+  data: {
+    hasOpenApi: boolean;
+    masterDataQuality: "GOOD" | "PARTIAL" | "POOR" | "";
+    processesUpToDate: boolean;
+    readinessNotes: string;
+  },
+) {
+  await db.systemRef.update({
+    where: { id },
+    data: {
+      hasOpenApi: data.hasOpenApi,
+      masterDataQuality: data.masterDataQuality || null,
+      processesUpToDate: data.processesUpToDate,
+      readinessNotes: data.readinessNotes.trim() || null,
+    },
+  });
+  revalidatePath("/landscape/readiness");
+  revalidatePath("/landscape");
+}
+
 export async function deleteSystem(id: string) {
   // DataObject.ownerSystemId har ingen cascade — ryd referencen først.
   await db.dataObject.updateMany({

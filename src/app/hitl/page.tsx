@@ -1,21 +1,43 @@
-import { Upcoming } from "@/components/Upcoming";
+import { db } from "@/lib/db";
+import { PageHeader } from "@/components/PageHeader";
+import { Empty } from "@/components/ui";
+import { ConsultantCreator } from "@/components/ConsultantCreator";
+import { ConsultantCard } from "@/components/ConsultantCard";
 
-export default function HitlPage() {
+export const dynamic = "force-dynamic";
+
+export default async function HitlPage() {
+  const consultants = await db.consultant.findMany({
+    orderBy: { sortOrder: "asc" },
+  });
+
   return (
-    <Upcoming
-      eyebrow="Altid tilgængelig"
-      title="Kontakt en konsulent"
-      lead="Agenten kan meget, men ikke alt. Der skal altid være en vej til et menneske — uanset hvor i forløbet man står."
-      steps={[
-        {
-          title: "Spørg herfra",
-          body: "Spørgsmålet sendes med den kontekst du står i — hvilken proces, hvilket skridt, hvilket forslag.",
-        },
-        {
-          title: "En rigtig konsulent svarer",
-          body: "Svaret lander i systemet, så det bliver en del af virksomhedens hukommelse i stedet for at forsvinde i en mailtråd.",
-        },
-      ]}
-    />
+    <div>
+      <PageHeader
+        title="Kontakt en konsulent"
+        lead="Agenten kan meget, men ikke alt. Her er de rigtige mennesker bag Corner IQ — skriv, ring eller book et møde direkte."
+      />
+
+      <div className="p-8">
+        <ConsultantCreator />
+        {consultants.length === 0 ? (
+          <Empty>Ingen konsulenter tilføjet endnu.</Empty>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {consultants.map((c) => (
+              <ConsultantCard
+                key={c.id}
+                id={c.id}
+                name={c.name}
+                bio={c.bio}
+                email={c.email}
+                phone={c.phone}
+                bookingUrl={c.bookingUrl}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

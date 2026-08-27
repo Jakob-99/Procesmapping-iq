@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { AgentTurn } from "@/lib/interview";
 import { InterviewForm } from "./InterviewForm";
 import { Badge, type Tone } from "./ui";
@@ -10,6 +10,7 @@ import {
   saveInterviewMessage,
   saveInterviewNote,
   completeInterview,
+  submitImprovementLog,
 } from "@/app/interviews/actions";
 
 const NOTE_TONE: Record<string, Tone> = {
@@ -53,7 +54,20 @@ export function InterviewSession({
   const [done, setDone] = useState(false);
   const [started, setStarted] = useState(false);
   const [mock, setMock] = useState(false);
+  const [wish, setWish] = useState("");
+  const [wishSent, setWishSent] = useState(false);
+  const [wishPending, startWishTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
+
+  function sendWish() {
+    if (!wish.trim()) return;
+    startWishTransition(async () => {
+      await submitImprovementLog(subProcessId, employeeName, wish);
+      setWish("");
+      setWishSent(true);
+      setTimeout(() => setWishSent(false), 3000);
+    });
+  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -253,6 +267,35 @@ export function InterviewSession({
                 </p>
               </div>
             ))}
+          </div>
+        )}
+
+        {!preview && (
+          <div className="mt-6 border-t border-(--color-line) pt-5">
+            <div className="eyebrow mb-2">Foreslå en forbedring</div>
+            <p className="mb-2.5 text-[12px] leading-relaxed text-(--color-faint)">
+              Har du en idé eller et ønske til hvordan noget kunne gøres bedre?
+              Det bliver synligt sammen med resten af kortlægningen.
+            </p>
+            <textarea
+              value={wish}
+              onChange={(e) => setWish(e.target.value)}
+              placeholder="Fx: Det ville hjælpe hvis…"
+              disabled={wishPending}
+              rows={3}
+              className="w-full resize-none rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-(--color-faint) focus:border-(--color-clay-line)"
+            />
+            <button
+              type="button"
+              onClick={sendWish}
+              disabled={wishPending || !wish.trim()}
+              className="mt-2 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-3 py-1.5 text-[12px] font-medium text-(--color-clay) transition-opacity hover:opacity-80 disabled:opacity-40"
+            >
+              {wishPending ? "Sender…" : "Send"}
+            </button>
+            {wishSent && (
+              <p className="mt-2 text-[11.5px] text-(--color-ok)">Sendt, tak!</p>
+            )}
           </div>
         )}
       </aside>

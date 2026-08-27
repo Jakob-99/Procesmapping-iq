@@ -6,6 +6,7 @@ import { BpmnViewer, type BpmnEditorHandle } from "./BpmnViewer";
 import { InterviewPanel } from "./InterviewPanel";
 import { InsightsPanel } from "./InsightsPanel";
 import { ExpertsPanel } from "./ExpertsPanel";
+import { ValidationPanel } from "./ValidationPanel";
 import { TriggersPanel } from "./TriggersPanel";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { Badge, ClayButton, Empty, type Tone } from "./ui";
@@ -23,7 +24,14 @@ import { saveDiagram } from "@/app/processes/[processId]/[subId]/actions";
 type Note = { id: string; category: string; content: string; importance: number };
 type Message = { id: string; role: string; content: string };
 type Expert = { id: string; name: string; email: string; invitedAt: string | null };
-type Validation = { id: string; verdict: string; comment: string | null };
+type Validation = {
+  id: string;
+  verdict: string;
+  comment: string | null;
+  validatorId: string;
+  createdAt: string;
+};
+type ImprovementLogItem = { id: string; content: string; status: string; createdAt: string };
 
 const DOCK_ITEMS = [
   { key: "ansvarlig", label: "Ansvarlig" },
@@ -111,6 +119,7 @@ export function SubProcessWorkspace({
   interviewer,
   experts,
   validations,
+  improvementLogs,
   subProcessId,
   startEvents,
   endEvents,
@@ -134,6 +143,7 @@ export function SubProcessWorkspace({
   interviewer: string | null;
   experts: Expert[];
   validations: Validation[];
+  improvementLogs: ImprovementLogItem[];
   subProcessId: string;
   startEvents: string[];
   endEvents: string[];
@@ -193,7 +203,7 @@ export function SubProcessWorkspace({
     eksperter: experts.length || null,
     keynotes: notes.length || null,
     validering: null,
-    indsigter: notes.length || null,
+    indsigter: notes.length + improvementLogs.length || null,
   };
 
   return (
@@ -298,6 +308,7 @@ export function SubProcessWorkspace({
             transcript={transcript}
             interviewer={interviewer}
             validations={validations}
+            improvementLogs={improvementLogs}
             startEvents={startEvents}
             endEvents={endEvents}
             users={users}
@@ -321,6 +332,7 @@ function DrawerContent({
   transcript,
   interviewer,
   validations,
+  improvementLogs,
   startEvents,
   endEvents,
   users,
@@ -337,6 +349,7 @@ function DrawerContent({
   transcript: Message[];
   interviewer: string | null;
   validations: Validation[];
+  improvementLogs: ImprovementLogItem[];
   startEvents: string[];
   endEvents: string[];
   users: { id: string; name: string }[];
@@ -394,25 +407,15 @@ function DrawerContent({
       return (
         <div>
           <DrawerHeader label="Validering" />
-          {validations.length === 0 ? (
-            <p className="text-[12.5px] text-(--color-faint)">Ikke valideret endnu.</p>
-          ) : (
-            validations.map((v) => (
-              <div key={v.id} className="mb-3">
-                <Badge tone={v.verdict === "APPROVED" ? "ok" : "warn"}>
-                  {v.verdict === "APPROVED" ? "Godkendt" : "Rettelser ønsket"}
-                </Badge>
-                {v.comment && (
-                  <p className="mt-2.5 text-[12.5px] leading-relaxed text-(--color-muted)">
-                    {v.comment}
-                  </p>
-                )}
-              </div>
-            ))
-          )}
+          <ValidationPanel
+            processId={processId}
+            subProcessId={sp.id}
+            validations={validations}
+            users={users}
+          />
         </div>
       );
     case "indsigter":
-      return <InsightsPanel notes={notes} />;
+      return <InsightsPanel notes={notes} logs={improvementLogs} />;
   }
 }

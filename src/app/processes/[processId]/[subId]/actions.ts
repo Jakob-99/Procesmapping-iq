@@ -224,6 +224,43 @@ export async function addExpertFromUser(
   revalidatePath(path(processId, subProcessId));
 }
 
+// Godkendelse eller anmodning om rettelser fra procesejer/medarbejder.
+// validatorRole udledes af den valgte brugers rolle i stedet for at blive
+// spurgt separat — der er kun to gyldige værdier i Validation-modellen, så
+// alt der ikke er PROCESS_OWNER falder ind under EMPLOYEE. En godkendelse
+// flytter underprocessen til VALIDATED, en anmodning om rettelser til
+// NEEDS_UPDATE, så statussen på procesoversigten altid afspejler seneste ord.
+export async function submitValidation(
+  processId: string,
+  subProcessId: string,
+  validatorUserId: string,
+  verdict: "APPROVED" | "CHANGES_REQUESTED",
+  comment?: string,
+) {
+  const user = await db.user.findUnique({ where: { id: validatorUserId } });
+  if (!user) return;
+
+  const validatorRole = user.role === "PROCESS_OWNER" ? "PROCESS_OWNER" : "EMPLOYEE";
+
+  await db.validation.create({
+    data: {
+      subProcessId,
+      validatorId: user.id,
+      validatorRole,
+      verdict,
+      comment: comment?.trim() || null,
+    },
+  });
+
+  await db.subProcess.update({
+    where: { id: subProcessId },
+    data: { status: verdict === "APPROVED" ? "VALIDATED" : "NEEDS_UPDATE" },
+  });
+
+  revalidatePath(path(processId, subProcessId));
+  revalidatePath(`/processes/${processId}`);
+}
+
 // Der er ikke koblet en rigtig mailudbyder på endnu — vi markerer invitationen
 // som sendt og logger den, så flowet kan testes uden SMTP-nøgler. Linket er
 // det samme for alle, så koden er det der bekræfter hvem der svarer.

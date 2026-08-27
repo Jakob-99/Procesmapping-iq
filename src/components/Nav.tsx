@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
-import { OrgSettingsModal } from "./OrgSettingsModal";
 import { LogoMark } from "./Logo";
+import { OrgSettingsModal } from "./OrgSettingsModal";
 import { proposalColor } from "@/lib/domain";
 import { togglePin } from "@/app/improvements/actions";
 
@@ -97,6 +97,12 @@ const ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="3.5" />
     </Icon>
   ),
+  transformation: (
+    <Icon>
+      <path d="M5 19 19 5" />
+      <path d="M9 5h10v10" />
+    </Icon>
+  ),
   kontakt: (
     <Icon>
       <path d="M4 18v-6a8 8 0 0 1 16 0v6" />
@@ -108,6 +114,14 @@ const ICONS: Record<string, ReactNode> = {
     <Icon>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 8v4l2.5 2.5" />
+    </Icon>
+  ),
+  opdatering: (
+    <Icon>
+      <path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5" />
+      <path d="M20 4v4.5h-4.5" />
+      <path d="M20 12a8 8 0 0 1-13.7 5.7L4 15.5" />
+      <path d="M4 20v-4.5h4.5" />
     </Icon>
   ),
 };
@@ -131,11 +145,15 @@ const GROUPS = [
         ],
       },
       { href: "/data", key: "data", label: "Data" },
+      { href: "/governance", key: "opdatering", label: "Opdatering styring" },
     ],
   },
   {
-    label: "Byg",
-    items: [{ href: "/improvements", key: "forbedringer", label: "Forbedringer" }],
+    label: "Innovation",
+    items: [
+      { href: "/transformation", key: "transformation", label: "Transformation" },
+      { href: "/improvements", key: "forbedringer", label: "Optimering" },
+    ],
   },
 ];
 

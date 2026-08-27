@@ -30,6 +30,7 @@ export default async function ProcessPage({
           assignee: true,
           _count: { select: { steps: true } },
           interviews: { include: { notes: true } },
+          experts: { orderBy: { createdAt: "asc" } },
         },
       },
     },
@@ -66,7 +67,21 @@ export default async function ProcessPage({
                 {process.owner?.name ?? "Ikke valgt"}
               </div>
             </div>
-            <SendInterviewButton processId={process.id} />
+            <SendInterviewButton
+              processId={process.id}
+              subProcesses={process.subProcesses
+                .filter((sp) => sp.experts.length > 0)
+                .map((sp) => ({
+                  id: sp.id,
+                  name: sp.name,
+                  experts: sp.experts.map((e) => ({
+                    id: e.id,
+                    name: e.name,
+                    email: e.email,
+                    invitedAt: e.invitedAt ? e.invitedAt.toISOString() : null,
+                  })),
+                }))}
+            />
             <Link
               href="/processes"
               className="rounded-md border border-(--color-line) bg-(--color-surface) px-3.5 py-2 text-[12.5px] text-(--color-muted) transition-colors hover:border-(--color-clay-line) hover:text-(--color-text)"

@@ -48,6 +48,11 @@ export default async function SubProcessPage({
     select: { id: true, name: true },
   });
 
+  const improvementLogs = await db.improvementLog.findMany({
+    where: { subProcessId: subId },
+    orderBy: { createdAt: "desc" },
+  });
+
   const st =
     SUBPROCESS_STATUS[sp.status as keyof typeof SUBPROCESS_STATUS] ??
     SUBPROCESS_STATUS.NOT_STARTED;
@@ -103,7 +108,19 @@ export default async function SubProcessPage({
         email: e.email,
         invitedAt: e.invitedAt ? e.invitedAt.toISOString() : null,
       }))}
-      validations={sp.validations}
+      validations={sp.validations.map((v) => ({
+        id: v.id,
+        verdict: v.verdict,
+        comment: v.comment,
+        validatorId: v.validatorId,
+        createdAt: v.createdAt.toISOString(),
+      }))}
+      improvementLogs={improvementLogs.map((l) => ({
+        id: l.id,
+        content: l.content,
+        status: l.status,
+        createdAt: l.createdAt.toISOString(),
+      }))}
       subProcessId={sp.id}
     />
     </>

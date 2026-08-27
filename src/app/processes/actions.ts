@@ -59,9 +59,9 @@ export async function reorderProcesses(ids: string[]) {
 }
 
 // Sletter en e2e-proces og alle dens underprocesser, skridt, interviews m.v.
-// (cascader via schemaet). Forbedringer og testcases der peger på processen
-// eller dens underprocesser har ingen cascade — de løsrives i stedet for at
-// slettes med, så forbedringslogikken ikke mister historik ved en fejl.
+// (cascader via schemaet). Forbedringer der peger på processen eller dens
+// underprocesser har ingen cascade — de løsrives i stedet for at slettes med,
+// så forbedringslogikken ikke mister historik ved en fejl.
 export async function deleteProcess(processId: string) {
   const subProcesses = await db.subProcess.findMany({
     where: { processId },
@@ -73,22 +73,17 @@ export async function deleteProcess(processId: string) {
     where: { OR: [{ processId }, { subProcessId: { in: subIds } }] },
     data: { processId: null, subProcessId: null },
   });
-  if (subIds.length) {
-    await db.testCase.updateMany({
-      where: { subProcessId: { in: subIds } },
-      data: { subProcessId: null },
-    });
-  }
 
   await db.process.delete({ where: { id: processId } });
   revalidatePath("/processes");
 }
 
-// Sender interview-invitationen til samtlige procesksperter på tværs af alle
-// underprocesser i denne e2e-proces — ikke kun én underproces ad gangen.
-export async function sendInterviewToProcessExperts(processId: string) {
+// Sender interview-invitationen til procesksperterne på de underprocesser
+// brugeren har valgt i "Send interview"-popup'en — ikke nødvendigvis alle
+// underprocesser i e2e-processen, da man kan fravælge nogen der.
+export async function sendInterviewToSubProcesses(processId: string, subProcessIds: string[]) {
   const experts = await db.subProcessExpert.findMany({
-    where: { subProcess: { processId } },
+    where: { subProcessId: { in: subProcessIds }, subProcess: { processId } },
   });
 
   await db.subProcessExpert.updateMany({

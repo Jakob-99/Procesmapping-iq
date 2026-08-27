@@ -46,7 +46,18 @@ export default async function RootLayout({
       {/* Appen går helt ud til kanten. Ingen ramme, ingen kasse. */}
       <body className="flex h-screen flex-col overflow-hidden">
         <BreadcrumbProvider>
-          <Topbar />
+          <Topbar
+            users={
+              organization
+                ? organization.users.map((u) => ({
+                    id: u.id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                  }))
+                : []
+            }
+          />
           <div className="flex flex-1 overflow-hidden">
             <Nav
               organization={organization ? { id: organization.id, name: organization.name } : null}

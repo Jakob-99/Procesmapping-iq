@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { useBreadcrumb } from "./BreadcrumbContext";
 
@@ -18,7 +19,8 @@ const SECTIONS: Record<string, string> = {
   landscape: "Systemer",
   data: "Data",
   roles: "Roller",
-  improvements: "Forbedringer",
+  improvements: "Optimering",
+  transformation: "Transformation",
   hitl: "Konsulent",
   interviews: "Interview",
 };
@@ -37,7 +39,59 @@ function Chevron() {
   );
 }
 
-export function Topbar() {
+type OrgUser = { id: string; name: string; email: string; role: string };
+
+/*
+  Profilcirklen er PERSONLIG (den enkelte respondent), adskilt fra det
+  organisations-brede Kontrolpanel som stadig ligger nederst i Nav'en — de to
+  styrer forskellige ting og skal ikke pege på det samme sted. Der er endnu
+  intet login/session-begreb i appen, så "mig" er indtil videre den første
+  bruger i listen; dropdown'en viser blot profilen, ingen redigerbare
+  personlige indstillinger findes endnu.
+*/
+function ProfileMenu({ users }: { users: OrgUser[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const me = users[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  if (!me) return null;
+
+  const initial = me.name.trim().charAt(0).toUpperCase() || "?";
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Profil"
+        className="flex h-6 w-6 items-center justify-center rounded-full bg-(--color-clay) text-[11px] font-medium text-white transition-opacity hover:opacity-85"
+      >
+        {initial}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
+          <div className="truncate text-[13px] font-medium text-(--color-text)">{me.name}</div>
+          <div className="truncate text-[11.5px] text-(--color-muted)">{me.email}</div>
+          <div className="mt-2 border-t border-(--color-line) pt-2 text-[11px] text-(--color-faint)">
+            Personlige indstillinger kommer senere.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Topbar({ users }: { users: OrgUser[] }) {
   const path = usePathname();
   const custom = useBreadcrumb();
   const first = path.split("/").filter(Boolean)[0];
@@ -79,6 +133,10 @@ export function Topbar() {
           </span>
         );
       })}
+
+      <div className="ml-auto flex items-center">
+        <ProfileMenu users={users} />
+      </div>
     </header>
   );
 }

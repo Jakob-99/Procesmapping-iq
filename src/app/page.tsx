@@ -21,7 +21,7 @@ export default async function Home() {
     );
   }
 
-  const [processes, subProcesses, systems, roleCount, notes] = await Promise.all([
+  const [processes, subProcesses, systems, roleCount, notes, proposals] = await Promise.all([
     db.process.findMany({
       where: { engagementId: engagement.id, category: "CORE" },
       include: { owner: true, subProcesses: true },
@@ -40,6 +40,11 @@ export default async function Home() {
       where: { importance: 3 },
       take: 3,
       orderBy: { createdAt: "asc" },
+    }),
+    db.aiosProposal.findMany({
+      where: { improvement: { engagementId: engagement.id } },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -85,6 +90,7 @@ export default async function Home() {
       />
 
       <Chat
+        attachables={proposals.map((p) => ({ id: p.id, name: p.name }))}
         intro={
           <BrainIntro
             orgName={engagement.organization.name}
