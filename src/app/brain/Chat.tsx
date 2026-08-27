@@ -125,15 +125,6 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
                 ))}
               </div>
             </div>
-
-            <div className="mx-auto mt-10 max-w-3xl">
-              <div className="eyebrow mb-1.5">Corner IQ</div>
-              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-(--color-text)">
-                Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
-                forretningen — spørg som du ville spørge en kollega der har
-                været her i tyve år.
-              </p>
-            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-7">
@@ -165,6 +156,12 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
 
       <div className="px-8 py-5">
         <div className="mx-auto max-w-3xl">
+          {!started && (
+            <p className="mb-3 text-[14px] text-(--color-text)">
+              Hej, hvordan kan jeg hjælpe?
+            </p>
+          )}
+
           {attached.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {attached.map((a) => (
