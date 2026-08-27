@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { deleteConsultant } from "@/app/hitl/actions";
+import { deleteConsultant } from "@/app/(customer)/hitl/actions";
 
 function bookingHref(consultant: { email: string | null; bookingUrl: string | null; name: string }) {
   if (consultant.bookingUrl) return consultant.bookingUrl;

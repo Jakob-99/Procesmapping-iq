@@ -11,7 +11,7 @@ import {
   saveInterviewNote,
   completeInterview,
   submitImprovementLog,
-} from "@/app/interviews/actions";
+} from "@/app/(customer)/interviews/actions";
 
 const NOTE_TONE: Record<string, Tone> = {
   PAIN: "alert",

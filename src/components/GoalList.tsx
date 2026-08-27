@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addStrategicGoal, removeStrategicGoal } from "@/app/scoping/actions";
+import { addStrategicGoal, removeStrategicGoal } from "@/app/(customer)/scoping/actions";
 import { ClayButton } from "./ui";
 
 export function GoalList({ goals }: { goals: string[] }) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createProcess } from "@/app/processes/actions";
+import { createProcess } from "@/app/(customer)/processes/actions";
 import { ClayButton } from "./ui";
 
 export function ProcessCreator() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createConsultant } from "@/app/hitl/actions";
+import { createConsultant } from "@/app/(customer)/hitl/actions";
 import { ClayButton } from "./ui";
 
 export function ConsultantCreator() {

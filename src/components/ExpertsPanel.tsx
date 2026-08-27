@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addExpertFromUser, sendInvite } from "@/app/processes/[processId]/[subId]/actions";
+import { addExpertFromUser, sendInvite } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 import { ClayButton } from "./ui";
 
 type Expert = { id: string; name: string; email: string; invitedAt: string | null };
@@ -67,7 +67,7 @@ export function ExpertsPanel({
         <div className="eyebrow mb-1">Tilføj procesekspert</div>
         {availableUsers.length === 0 ? (
           <p className="text-[12px] text-(--color-faint)">
-            Ingen flere respondenter at vælge — tilføj dem i Kontrolpanelet.
+            Ingen flere brugere at vælge — tilføj dem i Kontrolpanelet.
           </p>
         ) : (
           <>
@@ -76,7 +76,7 @@ export function ExpertsPanel({
               onChange={(e) => setSelectedUserId(e.target.value)}
               className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
             >
-              <option value="">Vælg respondent…</option>
+              <option value="">Vælg bruger…</option>
               {availableUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}

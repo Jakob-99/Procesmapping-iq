@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { deleteSystem } from "@/app/landscape/actions";
+import { deleteSystem } from "@/app/(customer)/landscape/actions";
 
 export function SystemCard({
   id,

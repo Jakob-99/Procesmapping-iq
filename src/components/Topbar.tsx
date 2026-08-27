@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { useBreadcrumb } from "./BreadcrumbContext";
-import { logout } from "@/app/login/actions";
+import { logout } from "@/app/(customer)/login/actions";
 
 /*
   Topbaren følger Supabase-mønstret: et overordnet mærke, så en brødkrumme ned
@@ -43,7 +43,7 @@ function Chevron() {
 type OrgUser = { id: string; name: string; email: string; role: string };
 
 /*
-  Profilcirklen er PERSONLIG (den enkelte respondent), adskilt fra det
+  Profilcirklen er PERSONLIG (den enkelte bruger), adskilt fra det
   organisations-brede Kontrolpanel som stadig ligger nederst i Nav'en — de to
   styrer forskellige ting og skal ikke pege på det samme sted. "Mig" er nu den
   faktisk indloggede bruger (session_uid-cookien, se lib/session.ts), ikke

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { deleteDataObject } from "@/app/data/actions";
+import { deleteDataObject } from "@/app/(customer)/data/actions";
 import { Badge } from "./ui";
 
 export function DataObjectCard({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createSystem } from "@/app/landscape/actions";
+import { createSystem } from "@/app/(customer)/landscape/actions";
 import { ClayButton } from "./ui";
 
 export function SystemCreator() {

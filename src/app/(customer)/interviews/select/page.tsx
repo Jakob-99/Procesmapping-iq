@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getInterviewUser } from "@/lib/interview-session";
 import { PageHeader } from "@/components/PageHeader";
 import { Empty, Panel } from "@/components/ui";
-import { logoutInterview } from "@/app/interviews/actions";
+import { logoutInterview } from "@/app/(customer)/interviews/actions";
 
 export const dynamic = "force-dynamic";
 

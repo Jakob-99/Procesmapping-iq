@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { submitValidation } from "@/app/processes/[processId]/[subId]/actions";
+import { submitValidation } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 import { Badge } from "./ui";
 
 type Validation = {

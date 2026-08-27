@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createSubProcess } from "@/app/processes/actions";
+import { createSubProcess } from "@/app/(customer)/processes/actions";
 import { ClayButton } from "./ui";
 
 /*

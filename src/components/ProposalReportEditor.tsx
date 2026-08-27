@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateProposalReport } from "@/app/improvements/actions";
+import { updateProposalReport } from "@/app/(customer)/improvements/actions";
 import { Modal } from "./Modal";
 import { ClayButton, OutlineButton } from "./ui";
 import {

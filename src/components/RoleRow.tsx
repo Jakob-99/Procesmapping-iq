@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { deleteRole } from "@/app/roles/actions";
+import { deleteRole } from "@/app/(customer)/roles/actions";
 
 export function RoleRow({
   id,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { setAssignee } from "@/app/processes/[processId]/[subId]/actions";
+import { setAssignee } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 
 type UserOption = { id: string; name: string };
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { renameSubProcess } from "@/app/processes/[processId]/[subId]/actions";
+import { renameSubProcess } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 import { TriggerList } from "./TriggerList";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { Badge, type Tone } from "./ui";

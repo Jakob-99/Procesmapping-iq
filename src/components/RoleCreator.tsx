@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createRole } from "@/app/roles/actions";
+import { createRole } from "@/app/(customer)/roles/actions";
 import { ClayButton } from "./ui";
 
 export function RoleCreator() {

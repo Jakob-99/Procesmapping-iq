@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { updateSystemReadiness } from "@/app/landscape/actions";
+import { updateSystemReadiness } from "@/app/(customer)/landscape/actions";
 import { Badge, ClayButton, OutlineButton } from "./ui";
 import { MASTER_DATA_QUALITY_LABELS, VERDICT_LABELS, systemReadiness } from "@/lib/readiness";
 

@@ -15,14 +15,17 @@ type OrgUser = { id: string; name: string; email: string; role: string };
 
 const PAGES = [
   { key: "organisation", label: "Organisation" },
-  { key: "brugere", label: "Respondenter" },
+  { key: "brugere", label: "Brugere" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
 
 /*
-  Kontrolpanelet: organisationens navn, og listen af brugere/respondenter —
-  det er den samme liste der kan vælges som procesekspert på et interview.
+  Kontrolpanelet: organisationens navn, og listen af brugere — dem der kan
+  logge ind og bruge systemet. IKKE det samme som respondenter/eksperter
+  (SubProcessExpert), som er dem interviews sendes ud til — en bruger kan
+  vælges som kilde til en ny respondent (se addExpertFromUser), men de to
+  begreber holdes bevidst adskilt i UI'en.
   Siderne vælges i en sidemenu, ligesom resten af appens navigation, i stedet
   for at ligge stablet under hinanden i én lang scroll.
 */
@@ -108,16 +111,16 @@ export function UsersSection({
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <div className="eyebrow">Respondenter</div>
+        <div className="eyebrow">Brugere</div>
         {!adding && (
-          <OutlineButton onClick={() => setAdding(true)}>+ Tilføj respondent</OutlineButton>
+          <OutlineButton onClick={() => setAdding(true)}>+ Tilføj bruger</OutlineButton>
         )}
       </div>
 
       <div className="divide-y divide-(--color-line-soft) rounded-lg border border-(--color-line-soft)">
         {users.length === 0 && !adding && (
           <p className="px-3 py-4 text-[12.5px] text-(--color-faint)">
-            Ingen respondenter endnu.
+            Ingen brugere endnu.
           </p>
         )}
         {users.map((u) =>
@@ -160,7 +163,7 @@ function UserDisplayRow({ user, onEdit }: { user: OrgUser; onEdit: () => void })
           type="button"
           disabled={pending}
           onClick={() => {
-            if (confirm(`Fjern ${user.name} som respondent?`)) {
+            if (confirm(`Fjern ${user.name} som bruger?`)) {
               startTransition(() => deleteUser(user.id));
             }
           }}

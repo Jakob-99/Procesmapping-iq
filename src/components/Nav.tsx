@@ -6,7 +6,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import { LogoMark } from "./Logo";
 import { OrgSettingsModal } from "./OrgSettingsModal";
 import { proposalColor } from "@/lib/domain";
-import { togglePin } from "@/app/improvements/actions";
+import { togglePin } from "@/app/(customer)/improvements/actions";
 
 /*
   Navigationen følger forløbet: først det man spørger, så det man bygger

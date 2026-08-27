@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
-import { deleteProcess, reorderProcesses } from "@/app/processes/actions";
+import { deleteProcess, reorderProcesses } from "@/app/(customer)/processes/actions";
 
 /*
   Procesmodellen — virksomhedens landkort.

@@ -209,8 +209,8 @@ export async function saveDiagram(
   revalidatePath(path(processId, subProcessId));
 }
 
-// Procesekspert valgt fra organisationens brugerliste (samme liste som
-// Kontrolpanelets respondenter) frem for fritekst.
+// Procesekspert (respondent) valgt fra organisationens brugerliste (samme
+// liste som Kontrolpanelets Brugere) frem for fritekst.
 export async function addExpertFromUser(
   processId: string,
   subProcessId: string,

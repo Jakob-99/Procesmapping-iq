@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { proposalGradient } from "@/lib/domain";
-import { togglePin } from "@/app/improvements/actions";
+import { togglePin } from "@/app/(customer)/improvements/actions";
 
 type Proposal = {
   id: string;

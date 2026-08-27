@@ -118,11 +118,20 @@ export async function revokeAccess(engagementId: string, targetConsultantId: str
 // Sætter kundens session_uid-cookie til den valgte bruger, så konsulenten
 // reelt "bliver" den kunde i kundefladen — den funktion Jakob bad om helt
 // oprindeligt ("tilgå systemer som man som konsulent har fået adgang til").
+// Bevidst begrænset til KUN konsulentens EGEN brugerkonto (samme mail) —
+// Jakob afviste eksplicit at kunne åbne som navngivne medarbejdere som
+// Mette/Anders, selvom det var logget i audit-loggen. Konsulenten skal
+// selv være oprettet som bruger hos kunden (se UsersSection) for at have
+// noget at åbne.
 export async function impersonateUser(userId: string): Promise<never> {
   const consultant = await requireConsultant();
 
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error("Bruger findes ikke.");
+
+  if (user.email.toLowerCase() !== consultant.email.toLowerCase()) {
+    throw new Error("Du kan kun åbne din egen brugerkonto hos kunden.");
+  }
 
   const hasAccess = await db.consultantEngagementAccess.findFirst({
     where: { consultantId: consultant.id, engagement: { organizationId: user.organizationId } },

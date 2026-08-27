@@ -6,7 +6,7 @@ import {
   setPolicyActive,
   setPolicyAutoEmail,
   setPolicyInterval,
-} from "@/app/governance/actions";
+} from "@/app/(customer)/governance/actions";
 import { Badge } from "./ui";
 
 const INTERVAL_OPTIONS = [

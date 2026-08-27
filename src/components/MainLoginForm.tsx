@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { loginWithMainCode, requestLoginCode } from "@/app/login/actions";
+import { loginWithMainCode, requestLoginCode } from "@/app/(customer)/login/actions";
 import { ClayButton } from "./ui";
 
 /*

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createDataObject } from "@/app/data/actions";
+import { createDataObject } from "@/app/(customer)/data/actions";
 import { ClayButton } from "./ui";
 
 export function DataObjectCreator({ systems }: { systems: { id: string; name: string }[] }) {

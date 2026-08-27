@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { loginWithCode } from "@/app/interviews/actions";
+import { loginWithCode } from "@/app/(customer)/interviews/actions";
 import { ClayButton } from "./ui";
 
 export function LoginCodeForm() {

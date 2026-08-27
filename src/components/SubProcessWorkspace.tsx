@@ -10,7 +10,7 @@ import { ValidationPanel } from "./ValidationPanel";
 import { TriggersPanel } from "./TriggersPanel";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { Badge, ClayButton, Empty, type Tone } from "./ui";
-import { saveDiagram } from "@/app/processes/[processId]/[subId]/actions";
+import { saveDiagram } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 
 /*
   Underprocessens arbejdsflade: tegningen får hele skærmen på et prikket

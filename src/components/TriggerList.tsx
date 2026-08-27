@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { addTrigger, removeTrigger } from "@/app/processes/[processId]/[subId]/actions";
+import { addTrigger, removeTrigger } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 import { ClayButton } from "./ui";
 
 /*

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { sendInterviewToSubProcesses } from "@/app/processes/actions";
+import { sendInterviewToSubProcesses } from "@/app/(customer)/processes/actions";
 import { ClayButton } from "./ui";
 
 type Expert = { id: string; name: string; email: string; invitedAt: string | null };
