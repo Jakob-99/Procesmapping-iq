@@ -15,7 +15,7 @@ const PIXEL = 10;
 /* Pixel-logoet der åbner hjernens forside, før man har spurgt om noget. */
 export function PixelLogo() {
   return (
-    <div className="flex justify-center gap-3.5">
+    <div className="flex justify-start gap-3.5">
       {[...WORD].map((ch, i) => {
         const pattern = PIXEL_FONT[ch];
         const cols = pattern[0].length;
