@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge, type Tone } from "./ui";
+import { PixelLogo } from "./PixelLogo";
 
 /*
   Det hjernen ved, før man har spurgt om noget.
@@ -109,7 +110,9 @@ export function BrainIntro({
 }) {
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-6">
+      <PixelLogo />
+
+      <div className="mb-7 mt-8 flex flex-wrap items-end justify-between gap-6">
         <div className="dot-grid relative -mx-3 -my-2 rounded-2xl px-3 py-2" style={{ backgroundPosition: "-3px -2px" }}>
           <div className="eyebrow mb-2">Kortlagt af {orgName}</div>
           <div className="hero-number">

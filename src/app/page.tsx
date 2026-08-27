@@ -1,6 +1,5 @@
 import { db } from "@/lib/db";
 import { activeEngagement } from "@/lib/engagement";
-import { PageHeader } from "@/components/PageHeader";
 import { BrainIntro } from "@/components/BrainIntro";
 import { Empty, type Tone } from "@/components/ui";
 import { Chat } from "./brain/Chat";
@@ -83,12 +82,6 @@ export default async function Home() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        eyebrow={engagement.organization.name}
-        title="Hjernen"
-        lead="Jeg ved hvad der faktisk sker i forretningen — hvem der gør hvad, i hvilke systemer, med hvilke data. Spørg som du ville spørge en kollega der har været her i tyve år."
-      />
-
       <Chat
         attachables={proposals.map((p) => ({ id: p.id, name: p.name }))}
         intro={
