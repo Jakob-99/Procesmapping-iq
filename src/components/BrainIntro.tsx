@@ -44,7 +44,7 @@ export function BrainIntro({
   stats: { validated: number; total: number; systems: number; roles: number; notes: number };
 }) {
   return (
-    <div className="max-w-3xl">
+    <div className="mx-auto max-w-3xl">
       <PixelLogo />
 
       <div className="mt-10 flex flex-wrap items-end justify-between gap-6">
