@@ -211,6 +211,8 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
           <div className="rise">
             {intro}
 
+            <div className="mt-10">{inputBar}</div>
+
             <div className="mx-auto mt-10 max-w-3xl">
               <div className="eyebrow mb-3">Prøv at spørge</div>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -225,8 +227,6 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
                 ))}
               </div>
             </div>
-
-            <div className="mt-10">{inputBar}</div>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-7">
