@@ -208,7 +208,7 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
     <div className="flex min-h-0 flex-1 flex-col">
       <div
         className={`min-h-0 flex-1 overflow-y-auto px-8 py-7 ${
-          !started ? "flex flex-col justify-[safe_center]" : ""
+          !started ? "flex flex-col justify-center" : ""
         }`}
       >
         {!started ? (
