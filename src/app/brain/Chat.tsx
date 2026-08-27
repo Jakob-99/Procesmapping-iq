@@ -110,6 +110,16 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
         {!started ? (
           <div className="rise">
             {intro}
+
+            <div className="mx-auto mt-10 max-w-3xl">
+              <div className="eyebrow mb-1.5">Corner IQ</div>
+              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-(--color-text)">
+                Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
+                forretningen — spørg som du ville spørge en kollega der har
+                været her i tyve år.
+              </p>
+            </div>
+
             <div className="mx-auto mt-10 max-w-3xl">
               <div className="eyebrow mb-3">Prøv at spørge</div>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -155,17 +165,6 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
 
       <div className="px-8 py-5">
         <div className="mx-auto max-w-3xl">
-          {!started && (
-            <div className="mb-4">
-              <div className="eyebrow mb-1.5">Corner IQ</div>
-              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-(--color-text)">
-                Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
-                forretningen — spørg som du ville spørge en kollega der har
-                været her i tyve år.
-              </p>
-            </div>
-          )}
-
           {attached.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {attached.map((a) => (
