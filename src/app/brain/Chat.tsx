@@ -112,15 +112,6 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
             {intro}
 
             <div className="mx-auto mt-10 max-w-3xl">
-              <div className="eyebrow mb-1.5">Corner IQ</div>
-              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-(--color-text)">
-                Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
-                forretningen — spørg som du ville spørge en kollega der har
-                været her i tyve år.
-              </p>
-            </div>
-
-            <div className="mx-auto mt-10 max-w-3xl">
               <div className="eyebrow mb-3">Prøv at spørge</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
@@ -133,6 +124,15 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="mx-auto mt-10 max-w-3xl">
+              <div className="eyebrow mb-1.5">Corner IQ</div>
+              <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-(--color-text)">
+                Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
+                forretningen — spørg som du ville spørge en kollega der har
+                været her i tyve år.
+              </p>
             </div>
           </div>
         ) : (
