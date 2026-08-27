@@ -20,13 +20,13 @@ export default async function Home() {
     );
   }
 
-  const [subProcesses, systemCount, roleCount, noteCount, proposals] = await Promise.all([
+  const [subProcesses, systemCount, roleCount, dataCount, proposals] = await Promise.all([
     db.subProcess.findMany({
       where: { process: { engagementId: engagement.id } },
     }),
     db.systemRef.count({ where: { engagementId: engagement.id } }),
     db.businessRole.count({ where: { engagementId: engagement.id } }),
-    db.interviewNote.count({ where: { importance: 3 } }),
+    db.dataObject.count({ where: { engagementId: engagement.id } }),
     db.aiosProposal.findMany({
       where: { improvement: { engagementId: engagement.id } },
       select: { id: true, name: true },
@@ -53,7 +53,7 @@ export default async function Home() {
               total: inScope.length,
               systems: systemCount,
               roles: roleCount,
-              notes: noteCount,
+              data: dataCount,
             }}
           />
         }

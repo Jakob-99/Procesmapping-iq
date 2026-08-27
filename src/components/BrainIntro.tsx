@@ -9,26 +9,10 @@ import { PixelLogo } from "./PixelLogo";
 */
 
 /* Kompakt nøgletal — etiket over, tal under, ingen ramme. */
-function Metric({
-  label,
-  value,
-  dark,
-}: {
-  label: string;
-  value: string | number;
-  dark?: boolean;
-}) {
+function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div
-      className={`rounded-lg px-3.5 py-3 ${
-        dark ? "bg-(--color-text) text-white" : "bg-(--color-raised)"
-      }`}
-    >
-      <div
-        className={`eyebrow mb-1.5 ${dark ? "text-white/50" : ""}`}
-      >
-        {label}
-      </div>
+    <div className="rounded-lg bg-(--color-raised) px-3.5 py-3">
+      <div className="eyebrow mb-1.5">{label}</div>
       <div className="tabular font-mono text-[19px] font-medium leading-none">{value}</div>
     </div>
   );
@@ -41,7 +25,7 @@ export function BrainIntro({
 }: {
   orgName: string;
   coverage: number;
-  stats: { validated: number; total: number; systems: number; roles: number; notes: number };
+  stats: { validated: number; total: number; systems: number; roles: number; data: number };
 }) {
   return (
     <div className="mx-auto max-w-3xl">
@@ -63,7 +47,7 @@ export function BrainIntro({
         <div className="grid flex-1 grid-cols-3 gap-2 sm:max-w-sm">
           <Metric label="Systemer" value={stats.systems} />
           <Metric label="Roller" value={stats.roles} />
-          <Metric label="Noter" value={stats.notes} dark />
+          <Metric label="Data" value={stats.data} />
         </div>
       </div>
     </div>
