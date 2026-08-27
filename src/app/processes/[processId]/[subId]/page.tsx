@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requireSessionUser } from "@/lib/session";
 import { SubProcessWorkspace } from "@/components/SubProcessWorkspace";
 import { SUBPROCESS_STATUS } from "@/lib/domain";
 import { buildBpmnXml } from "@/lib/bpmn";
@@ -15,6 +16,7 @@ export default async function SubProcessPage({
   params: Promise<{ processId: string; subId: string }>;
 }) {
   const { processId, subId } = await params;
+  const sessionUser = await requireSessionUser();
 
   const sp = await db.subProcess.findUnique({
     where: { id: subId },
@@ -40,7 +42,7 @@ export default async function SubProcessPage({
     },
   });
 
-  if (!sp) notFound();
+  if (!sp || sp.process.engagement.organizationId !== sessionUser.organizationId) notFound();
 
   const users = await db.user.findMany({
     where: { organizationId: sp.process.engagement.organizationId },

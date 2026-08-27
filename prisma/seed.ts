@@ -11,6 +11,15 @@ async function main() {
   await db.consultantLogEntry.deleteMany();
   await db.consultant.deleteMany();
 
+  // ConsultantAccount (admin-panelets login) rammes IKKE af deleteMany
+  // ovenfor — den er global og skal overleve at kunde-demodata gensås.
+  // Upsert så genkørsel af seedet ikke fejler på det unikke mail-felt.
+  await db.consultantAccount.upsert({
+    where: { email: "jakob@cornerstones.dk" },
+    update: {},
+    create: { email: "jakob@cornerstones.dk", name: "Jakob Breum Møller", role: "ADMIN" },
+  });
+
   const org = await db.organization.create({
     data: { name: "Nordvest Industri A/S", industry: "Produktion og engros" },
   });

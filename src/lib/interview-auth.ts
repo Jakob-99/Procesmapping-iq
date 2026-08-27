@@ -26,3 +26,13 @@ export async function ensureLoginCode(email: string): Promise<string | null> {
   });
   return code;
 }
+
+// Delt af begge login-flows (interview-koden og hovedappens login) — slår
+// koden op og returnerer hvilken bruger den hører til, uden at kende noget
+// til cookies eller hvor man skal sendes hen bagefter.
+export async function verifyLoginCode(code: string): Promise<string | null> {
+  const token = await db.loginToken.findFirst({
+    where: { token: code.trim(), expiresAt: { gt: new Date() } },
+  });
+  return token?.userId ?? null;
+}

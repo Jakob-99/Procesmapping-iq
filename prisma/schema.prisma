@@ -50,6 +50,62 @@ model LoginToken {
   createdAt DateTime  @default(now())
 }
 
+// --------------------------------------------------------- Konsulentpanel (admin)
+
+// En Cornerstones-konsulent der kan logge ind i admin-panelet — adskilt fra
+// User (kundens egne medarbejdere/procesejere). Aldrig tilgængelig fra
+// kundefladen; eget login, egen cookie, egen /admin-rute.
+model ConsultantAccount {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      String   @default("ADMIN") // ADMIN | CONSULTANT — rollestyring udbygges senere
+  createdAt DateTime @default(now())
+
+  loginTokens ConsultantLoginToken[]
+  access      ConsultantEngagementAccess[]
+  auditLogs   AdminAuditLog[]
+}
+
+// Samme magic-kode-mønster som LoginToken (se lib/interview-auth.ts) — egen
+// model fordi den hører til ConsultantAccount, ikke User.
+model ConsultantLoginToken {
+  id           String            @id @default(cuid())
+  token        String            @unique
+  consultantId String
+  consultant   ConsultantAccount @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime          @default(now())
+}
+
+// Hvilken konsulent har adgang til hvilket engagement — en konsulent kan
+// have flere kunder, en kunde kan have flere konsulenter tilknyttet.
+model ConsultantEngagementAccess {
+  id           String            @id @default(cuid())
+  consultantId String
+  consultant   ConsultantAccount @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  engagementId String
+  engagement   Engagement        @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  createdAt    DateTime          @default(now())
+
+  @@unique([consultantId, engagementId])
+}
+
+// Log over hvad konsulenter foretager sig af tunge/følsomme handlinger i
+// admin-panelet — hvem oprettede en kunde, gav/fjernede adgang, eller åbnede
+// kundefladen som en bestemt bruger. Ingen håndhævelse, kun sporbarhed.
+model AdminAuditLog {
+  id           String            @id @default(cuid())
+  consultantId String
+  consultant   ConsultantAccount @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  action       String // CREATE_CUSTOMER | GRANT_ACCESS | REVOKE_ACCESS | IMPERSONATE | INVITE_CONSULTANT | REMOVE_CONSULTANT
+  targetType   String? // Engagement | User | ConsultantAccount
+  targetId     String?
+  detail       String?
+  createdAt    DateTime          @default(now())
+}
+
 // ------------------------------------------------------------------ Engagement
 
 // Ét kundeforløb. Sættes op af FDE'en i de to opstartsmøder.
@@ -75,6 +131,7 @@ model Engagement {
   brainChats    BrainChat[]
   hitlRequests  HitlRequest[]
   reviewCycles  ReviewCycle[]
+  consultantAccess ConsultantEngagementAccess[]
 }
 
 // En fast rolle i forretningen — en menneskelig aktør, ikke en systembruger.

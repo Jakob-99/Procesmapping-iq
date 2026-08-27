@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requireSessionUser } from "@/lib/session";
 import { MaterialButtons } from "@/components/MaterialButtons";
 import { ProposalReportEditor } from "@/components/ProposalReportEditor";
 import { ToBeFlow } from "@/components/ToBeFlow";
@@ -26,6 +27,7 @@ export default async function ProposalPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const sessionUser = await requireSessionUser();
 
   const proposal = await db.aiosProposal.findUnique({
     where: { id },
@@ -35,7 +37,9 @@ export default async function ProposalPage({
     },
   });
 
-  if (!proposal) notFound();
+  if (!proposal || proposal.improvement.engagement.organizationId !== sessionUser.organizationId) {
+    notFound();
+  }
 
   const subProcessIds = proposal.improvement.subProcessId
     ? [proposal.improvement.subProcessId]

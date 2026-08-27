@@ -95,7 +95,7 @@ function OrgNameSection({ organizationId, name }: { organizationId: string; name
   );
 }
 
-function UsersSection({
+export function UsersSection({
   organizationId,
   users,
 }: {

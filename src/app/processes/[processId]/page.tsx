@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { requireSessionUser } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { InsightsPanel } from "@/components/InsightsPanel";
 import { SubProcessCreator } from "@/components/SubProcessCreator";
@@ -18,6 +19,7 @@ export default async function ProcessPage({
   params: Promise<{ processId: string }>;
 }) {
   const { processId } = await params;
+  const sessionUser = await requireSessionUser();
 
   const process = await db.process.findUnique({
     where: { id: processId },
@@ -36,7 +38,10 @@ export default async function ProcessPage({
     },
   });
 
-  if (!process) notFound();
+  // 404 (ikke redirect/fejl) hvis processen slet ikke findes ELLER hører til
+  // en anden organisation — ellers kan man se andre kunders processer ved
+  // bare at gætte/kende et id.
+  if (!process || process.engagement.organizationId !== sessionUser.organizationId) notFound();
 
   const users = await db.user.findMany({
     where: { organizationId: process.engagement.organizationId },

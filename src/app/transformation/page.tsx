@@ -1,7 +1,12 @@
 import { PageHeader } from "@/components/PageHeader";
 import { Empty, Panel } from "@/components/ui";
+import { requireSessionUser } from "@/lib/session";
 
-export default function TransformationPage() {
+export const dynamic = "force-dynamic";
+
+export default async function TransformationPage() {
+  await requireSessionUser();
+
   return (
     <div>
       <PageHeader

@@ -5,54 +5,32 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { useBreadcrumb } from "./BreadcrumbContext";
-import { logout } from "@/app/login/actions";
+import { logoutAdmin } from "@/app/admin/login/actions";
 
 /*
-  Topbaren følger Supabase-mønstret: et overordnet mærke, så en brødkrumme ned
-  til der hvor man står. På statiske sider er det bare sektionsnavnet; på
-  sider med rigtige navne bag id'er (proces, underproces …) melder siden selv
-  den fulde sti ind via <SetBreadcrumb>, fx Processer / Order to Cash /
-  Ordremodtagelse.
+  Samme opbygning som kundefladens Topbar.tsx: mærke + brødkrumme til
+  venstre, profilcirkel til højre. Egen komponent (ikke genbrug) fordi
+  identiteten her er en ConsultantAccount, ikke en User, og "hjem" er /admin
+  ikke /.
 */
 const SECTIONS: Record<string, string> = {
-  scoping: "Strategi",
-  processes: "Processer",
-  landscape: "Systemer",
-  data: "Data",
-  roles: "Roller",
-  improvements: "Optimering",
-  transformation: "Transformation",
-  hitl: "Konsulent",
-  interviews: "Interview",
+  customers: "Kunder",
+  consultants: "Konsulenter",
+  audit: "Log",
 };
 
 function Chevron() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M9 6l6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-type OrgUser = { id: string; name: string; email: string; role: string };
-
-/*
-  Profilcirklen er PERSONLIG (den enkelte respondent), adskilt fra det
-  organisations-brede Kontrolpanel som stadig ligger nederst i Nav'en — de to
-  styrer forskellige ting og skal ikke pege på det samme sted. "Mig" er nu den
-  faktisk indloggede bruger (session_uid-cookien, se lib/session.ts), ikke
-  længere en gætte-første-i-listen-antagelse.
-*/
-function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId: string | null }) {
+function ProfileMenu({ name, email }: { name: string; email: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const me = users.find((u) => u.id === currentUserId);
+  const initial = name.trim().charAt(0).toUpperCase() || "?";
 
   useEffect(() => {
     if (!open) return;
@@ -62,10 +40,6 @@ function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
-
-  if (!me) return null;
-
-  const initial = me.name.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <div ref={ref} className="relative">
@@ -80,15 +54,10 @@ function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId
 
       {open && (
         <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
-          <div className="truncate text-[13px] font-medium text-(--color-text)">{me.name}</div>
-          <div className="truncate text-[11.5px] text-(--color-muted)">{me.email}</div>
-          <div className="mt-2 border-t border-(--color-line) pt-2 text-[11px] text-(--color-faint)">
-            Personlige indstillinger kommer senere.
-          </div>
-          <form action={logout} className="mt-2 border-t border-(--color-line) pt-2">
-            <button className="text-[12px] text-(--color-muted) hover:text-(--color-text)">
-              Log ud
-            </button>
+          <div className="truncate text-[13px] font-medium text-(--color-text)">{name}</div>
+          <div className="truncate text-[11.5px] text-(--color-muted)">{email}</div>
+          <form action={logoutAdmin} className="mt-2 border-t border-(--color-line) pt-2">
+            <button className="text-[12px] text-(--color-muted) hover:text-(--color-text)">Log ud</button>
           </form>
         </div>
       )}
@@ -96,10 +65,10 @@ function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId
   );
 }
 
-export function Topbar({ users, currentUserId }: { users: OrgUser[]; currentUserId: string | null }) {
+export function AdminTopbar({ name, email }: { name: string; email: string }) {
   const path = usePathname();
   const custom = useBreadcrumb();
-  const first = path.split("/").filter(Boolean)[0];
+  const first = path.split("/").filter(Boolean)[1]; // "/admin/xxx" -> "xxx"
   const section = first ? SECTIONS[first] : undefined;
 
   const crumbs = custom ?? (section ? [{ label: section }] : []);
@@ -107,11 +76,14 @@ export function Topbar({ users, currentUserId }: { users: OrgUser[]; currentUser
   return (
     <header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-(--color-line) bg-(--color-raised) px-3 text-[13px]">
       <Link
-        href="/"
+        href="/admin"
         className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-medium text-(--color-text) hover:bg-(--color-sunken)"
       >
         <Logo size={16} />
-        <span>Corner IQ</span>
+        <span>
+          Corner<span className="text-(--color-clay)">IQ</span>
+        </span>
+        <span className="text-(--color-faint)">· Admin</span>
       </Link>
 
       {crumbs.map((c, i) => {
@@ -140,7 +112,7 @@ export function Topbar({ users, currentUserId }: { users: OrgUser[]; currentUser
       })}
 
       <div className="ml-auto flex items-center">
-        <ProfileMenu users={users} currentUserId={currentUserId} />
+        <ProfileMenu name={name} email={email} />
       </div>
     </header>
   );

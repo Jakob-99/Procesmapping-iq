@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { requireSessionUser } from "@/lib/session";
 import { PageHeader } from "@/components/PageHeader";
 import { Empty } from "@/components/ui";
 import { ConsultantCreator } from "@/components/ConsultantCreator";
@@ -7,6 +8,8 @@ import { ConsultantCard } from "@/components/ConsultantCard";
 export const dynamic = "force-dynamic";
 
 export default async function HitlPage() {
+  await requireSessionUser();
+
   const consultants = await db.consultant.findMany({
     orderBy: { sortOrder: "asc" },
   });

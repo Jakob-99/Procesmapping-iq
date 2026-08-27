@@ -4,19 +4,18 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { verifyLoginCode } from "@/lib/interview-auth";
 
 const COOKIE = "interview_uid";
 
 export async function loginWithCode(code: string): Promise<{ error: string } | never> {
-  const token = await db.loginToken.findFirst({
-    where: { token: code.trim(), expiresAt: { gt: new Date() } },
-  });
-  if (!token) {
+  const userId = await verifyLoginCode(code);
+  if (!userId) {
     return { error: "Forkert eller udløbet kode." };
   }
 
   const jar = await cookies();
-  jar.set(COOKIE, token.userId, {
+  jar.set(COOKIE, userId, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
