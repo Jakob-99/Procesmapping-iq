@@ -208,14 +208,14 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
     <div className="flex min-h-0 flex-1 flex-col">
       <div
         className={`min-h-0 flex-1 overflow-y-auto px-8 py-7 ${
-          !started ? "flex flex-col justify-center" : ""
+          !started ? "flex flex-col justify-[safe_center]" : ""
         }`}
       >
         {!started ? (
           <div className="rise">
             {intro}
 
-            <div className="mt-10">{inputBar}</div>
+            <div className="mt-16">{inputBar}</div>
 
             <div className="mx-auto mt-5 max-w-3xl">
               <div className="grid gap-2 sm:grid-cols-2">

@@ -31,7 +31,7 @@ export function BrainIntro({
     <div className="mx-auto max-w-3xl">
       <PixelLogo />
 
-      <div className="mt-10 flex flex-wrap items-end justify-between gap-6">
+      <div className="mt-16 flex flex-wrap items-end justify-between gap-6">
         <div className="dot-grid relative -mx-3 -my-2 rounded-2xl px-3 py-2" style={{ backgroundPosition: "-3px -2px" }}>
           <div className="eyebrow mb-2">Kortlagt af {orgName}</div>
           <div className="hero-number">
