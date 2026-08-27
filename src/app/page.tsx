@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { activeEngagement } from "@/lib/engagement";
 import { BrainIntro } from "@/components/BrainIntro";
-import { Empty, type Tone } from "@/components/ui";
+import { Empty } from "@/components/ui";
 import { Chat } from "./brain/Chat";
 
 export const dynamic = "force-dynamic";
@@ -20,26 +20,13 @@ export default async function Home() {
     );
   }
 
-  const [processes, subProcesses, systems, roleCount, notes, proposals] = await Promise.all([
-    db.process.findMany({
-      where: { engagementId: engagement.id, category: "CORE" },
-      include: { owner: true, subProcesses: true },
-      orderBy: { sortOrder: "asc" },
-    }),
+  const [subProcesses, systemCount, roleCount, noteCount, proposals] = await Promise.all([
     db.subProcess.findMany({
       where: { process: { engagementId: engagement.id } },
     }),
-    db.systemRef.findMany({
-      where: { engagementId: engagement.id },
-      include: { stepLinks: true },
-      orderBy: { name: "asc" },
-    }),
+    db.systemRef.count({ where: { engagementId: engagement.id } }),
     db.businessRole.count({ where: { engagementId: engagement.id } }),
-    db.interviewNote.findMany({
-      where: { importance: 3 },
-      take: 3,
-      orderBy: { createdAt: "asc" },
-    }),
+    db.interviewNote.count({ where: { importance: 3 } }),
     db.aiosProposal.findMany({
       where: { improvement: { engagementId: engagement.id } },
       select: { id: true, name: true },
@@ -53,33 +40,6 @@ export default async function Home() {
     ? Math.round((validated / inScope.length) * 100)
     : 0;
 
-  const processRows = processes.map((p) => {
-    const subs = p.subProcesses.filter((s) => s.inScope);
-    const done = subs.filter((s) => s.status === "VALIDATED").length;
-    return {
-      label: p.name,
-      sub: p.owner ? p.owner.name : "Ingen procesejer",
-      badge: `${done}/${subs.length}`,
-      tone: (done === subs.length && subs.length > 0
-        ? "ok"
-        : done > 0
-          ? "clay"
-          : "faint") as Tone,
-    };
-  });
-
-  // Systemerne der rører flest skridt står øverst — det er dem samtalen handler om.
-  const systemRows = systems
-    .slice()
-    .sort((a, b) => b.stepLinks.length - a.stepLinks.length)
-    .slice(0, 5)
-    .map((s) => ({
-      label: s.name,
-      sub: s.category ?? undefined,
-      badge: s.isMasterData ? "Master data" : undefined,
-      tone: "clay" as Tone,
-    }));
-
   return (
     <div className="flex h-full flex-col">
       <Chat
@@ -91,15 +51,10 @@ export default async function Home() {
             stats={{
               validated,
               total: inScope.length,
-              systems: systems.length,
+              systems: systemCount,
               roles: roleCount,
+              notes: noteCount,
             }}
-            processes={processRows}
-            systems={systemRows}
-            insights={notes.map((n) => ({
-              category: n.category,
-              content: n.content,
-            }))}
           />
         }
       />
