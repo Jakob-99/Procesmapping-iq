@@ -105,7 +105,7 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
   const started = messages.length > 0;
 
   const inputBar = (
-    <div className="mx-auto max-w-3xl">
+    <div className={`max-w-3xl ${started ? "mx-auto" : ""}`}>
       {!started && (
         <p className="mb-3 text-[14px] text-(--color-text)">
           Hej, hvordan kan jeg hjælpe?
@@ -213,7 +213,7 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
 
             <div className="mt-10">{inputBar}</div>
 
-            <div className="mx-auto mt-10 max-w-3xl">
+            <div className="mt-10 max-w-3xl">
               <div className="eyebrow mb-3">Prøv at spørge</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {SUGGESTIONS.map((s) => (
