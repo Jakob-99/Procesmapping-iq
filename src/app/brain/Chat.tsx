@@ -153,7 +153,7 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
         )}
       </div>
 
-      <div className="border-t border-(--color-line) px-8 py-5">
+      <div className="px-8 py-5">
         <div className="mx-auto max-w-3xl">
           {attached.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
