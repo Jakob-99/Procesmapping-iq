@@ -124,6 +124,17 @@ export function Chat({ intro, attachables = [] }: { intro?: ReactNode; attachabl
                 ))}
               </div>
             </div>
+
+            <div className="mx-auto mt-10 max-w-3xl">
+              <div className="rounded-lg border border-(--color-line) bg-(--color-raised) px-4 py-3.5">
+                <div className="eyebrow mb-1.5">Corner IQ</div>
+                <p className="text-[13px] leading-relaxed text-(--color-muted)">
+                  Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i
+                  forretningen — spørg som du ville spørge en kollega der har
+                  været her i tyve år.
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-7">

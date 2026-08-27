@@ -47,12 +47,6 @@ export function BrainIntro({
     <div className="mx-auto max-w-3xl">
       <PixelLogo />
 
-      <p className="mt-4 max-w-xl text-[13px] leading-relaxed text-(--color-muted)">
-        Velkommen til Corner IQ. Jeg ved hvad der faktisk sker i forretningen
-        — hvem der gør hvad, i hvilke systemer, med hvilke data. Spørg som du
-        ville spørge en kollega der har været her i tyve år.
-      </p>
-
       <div className="mt-10 flex flex-wrap items-end justify-between gap-6">
         <div className="dot-grid relative -mx-3 -my-2 rounded-2xl px-3 py-2" style={{ backgroundPosition: "-3px -2px" }}>
           <div className="eyebrow mb-2">Kortlagt af {orgName}</div>
