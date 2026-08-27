@@ -11,7 +11,7 @@ import { PixelLogo } from "./PixelLogo";
 /* Kompakt nøgletal — etiket over, tal under, ingen ramme. */
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg bg-(--color-raised) px-3.5 py-3">
+    <div className="rounded-lg bg-(--color-raised) px-5 py-4">
       <div className="eyebrow mb-1.5">{label}</div>
       <div className="tabular font-mono text-[19px] font-medium leading-none">{value}</div>
     </div>
@@ -44,7 +44,7 @@ export function BrainIntro({
           </p>
         </div>
 
-        <div className="grid flex-1 grid-cols-3 gap-2 sm:max-w-sm">
+        <div className="grid flex-1 grid-cols-3 gap-3 sm:max-w-sm">
           <Metric label="Systemer" value={stats.systems} />
           <Metric label="Roller" value={stats.roles} />
           <Metric label="Data" value={stats.data} />
