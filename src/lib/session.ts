@@ -12,8 +12,8 @@ export async function getSessionUser() {
   return db.user.findUnique({ where: { id: uid } });
 }
 
-// Bruges af beskyttede sider uden eget engagement-opslag (fx /hitl,
-// /transformation) — sender til /login hvis ingen session.
+// Bruges af beskyttede sider uden eget engagement-opslag (fx /hitl) —
+// sender til /login hvis ingen session.
 export async function requireSessionUser() {
   const user = await getSessionUser();
   if (!user) redirect("/login");

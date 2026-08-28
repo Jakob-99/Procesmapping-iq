@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
 import { ProposalGrid } from "@/components/ProposalGrid";
+import { ProposalGenerator } from "@/components/ProposalGenerator";
 import { Empty, Panel, Stat } from "@/components/ui";
 import { pickScore } from "@/lib/domain";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function ImprovementsPage() {
   const engagement = await requireEngagement();
 
-  const [processes, improvements] = await Promise.all([
+  const [processes, improvements, subProcesses] = await Promise.all([
     db.process.findMany({
       where: { engagementId: engagement.id },
       orderBy: { sortOrder: "asc" },
@@ -22,6 +23,11 @@ export default async function ImprovementsPage() {
         subProcess: true,
         proposals: { include: { processLinks: { include: { process: true } } } },
       },
+    }),
+    db.subProcess.findMany({
+      where: { process: { engagementId: engagement.id }, steps: { some: { lane: 0 } } },
+      orderBy: [{ process: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+      select: { id: true, name: true, process: { select: { name: true } } },
     }),
   ]);
 
@@ -68,7 +74,12 @@ export default async function ImprovementsPage() {
           <Stat label="Orkestreringslag" value={orchestration} hint="på tværs af flere e2e-processer" />
         </div>
 
-        <Panel eyebrow="Løsninger" title="Forbedringsrapporter" bodyClass="pt-1">
+        <Panel
+          eyebrow="Løsninger"
+          title="Forbedringsrapporter"
+          bodyClass="pt-1"
+          action={<ProposalGenerator subProcesses={subProcesses.map((s) => ({ id: s.id, name: s.name, processName: s.process.name }))} />}
+        >
           {proposals.length === 0 ? (
             <Empty>Ingen flaskehalse fundet endnu.</Empty>
           ) : (

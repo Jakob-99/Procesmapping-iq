@@ -86,7 +86,7 @@ function Tile({
         onClick={remove}
         disabled={pending}
         title="Slet proces"
-        className="absolute right-2.5 top-2.5 rounded-md px-1.5 py-0.5 text-[11px] text-(--color-faint) opacity-0 transition-opacity hover:text-(--color-alert) group-hover:opacity-100"
+        className="absolute right-2.5 top-2.5 rounded-md bg-(--color-surface) px-1.5 py-0.5 text-[11px] text-(--color-faint) opacity-70 transition-opacity hover:text-(--color-alert) group-hover:opacity-100"
       >
         Slet
       </button>

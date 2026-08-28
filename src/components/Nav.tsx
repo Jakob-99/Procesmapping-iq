@@ -97,12 +97,6 @@ const ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="3.5" />
     </Icon>
   ),
-  transformation: (
-    <Icon>
-      <path d="M5 19 19 5" />
-      <path d="M9 5h10v10" />
-    </Icon>
-  ),
   kontakt: (
     <Icon>
       <path d="M4 18v-6a8 8 0 0 1 16 0v6" />
@@ -150,10 +144,7 @@ const GROUPS = [
   },
   {
     label: "Innovation",
-    items: [
-      { href: "/transformation", key: "transformation", label: "Transformation" },
-      { href: "/improvements", key: "forbedringer", label: "Optimering" },
-    ],
+    items: [{ href: "/improvements", key: "forbedringer", label: "Optimering" }],
   },
 ];
 

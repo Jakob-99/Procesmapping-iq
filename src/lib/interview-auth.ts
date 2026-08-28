@@ -7,7 +7,10 @@ import { db } from "./db";
   6-cifret kode i token-feltet i stedet for et langt, opaque link.
 */
 export async function ensureLoginCode(email: string): Promise<string | null> {
-  const user = await db.user.findUnique({ where: { email } });
+  // consultantAccountId: null udelukker konsulenters egne kunde-sæder (se
+  // openCustomerAsConsultant i app/admin/actions.ts) — de logger ind via
+  // admin-panelet, ikke via denne mail-kode-flow.
+  const user = await db.user.findFirst({ where: { email, consultantAccountId: null } });
   if (!user) return null;
 
   const existing = await db.loginToken.findFirst({

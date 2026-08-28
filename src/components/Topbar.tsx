@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Logo } from "./Logo";
 import { useBreadcrumb } from "./BreadcrumbContext";
 import { logout } from "@/app/(customer)/login/actions";
+import { updateOwnProfile } from "@/app/actions/profile";
 
 /*
   Topbaren følger Supabase-mønstret: et overordnet mærke, så en brødkrumme ned
@@ -21,7 +22,6 @@ const SECTIONS: Record<string, string> = {
   data: "Data",
   roles: "Roller",
   improvements: "Optimering",
-  transformation: "Transformation",
   hitl: "Konsulent",
   interviews: "Interview",
 };
@@ -40,7 +40,7 @@ function Chevron() {
   );
 }
 
-type OrgUser = { id: string; name: string; email: string; role: string };
+type OrgUser = { id: string; name: string; email: string; role: string; title: string | null };
 
 /*
   Profilcirklen er PERSONLIG (den enkelte bruger), adskilt fra det
@@ -51,13 +51,17 @@ type OrgUser = { id: string; name: string; email: string; role: string };
 */
 function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId: string | null }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const me = users.find((u) => u.id === currentUserId);
 
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setEditing(false);
+      }
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -79,12 +83,25 @@ function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
-          <div className="truncate text-[13px] font-medium text-(--color-text)">{me.name}</div>
-          <div className="truncate text-[11.5px] text-(--color-muted)">{me.email}</div>
-          <div className="mt-2 border-t border-(--color-line) pt-2 text-[11px] text-(--color-faint)">
-            Personlige indstillinger kommer senere.
-          </div>
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
+          {editing ? (
+            <ProfileEditForm me={me} onDone={() => setEditing(false)} />
+          ) : (
+            <>
+              <div className="truncate text-[13px] font-medium text-(--color-text)">{me.name}</div>
+              {me.title && (
+                <div className="truncate text-[11.5px] text-(--color-muted)">{me.title}</div>
+              )}
+              <div className="truncate text-[11.5px] text-(--color-faint)">{me.email}</div>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="mt-2 border-t border-(--color-line) pt-2 text-[12px] text-(--color-muted) hover:text-(--color-text)"
+              >
+                Rediger navn og titel
+              </button>
+            </>
+          )}
           <form action={logout} className="mt-2 border-t border-(--color-line) pt-2">
             <button className="text-[12px] text-(--color-muted) hover:text-(--color-text)">
               Log ud
@@ -92,6 +109,54 @@ function ProfileMenu({ users, currentUserId }: { users: OrgUser[]; currentUserId
           </form>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProfileEditForm({ me, onDone }: { me: OrgUser; onDone: () => void }) {
+  const [name, setName] = useState(me.name);
+  const [title, setTitle] = useState(me.title ?? "");
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    if (!name.trim() || pending) return;
+    startTransition(async () => {
+      await updateOwnProfile(name, title);
+      onDone();
+    });
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Navn"
+        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      />
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Titel (valgfrit)"
+        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      />
+      <div className="flex gap-2 pt-0.5">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending || !name.trim()}
+          className="rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-2.5 py-1 text-[12px] font-medium text-(--color-clay) transition-colors hover:bg-(--color-clay-line) disabled:opacity-40"
+        >
+          {pending ? "Gemmer…" : "Gem"}
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          className="text-[12px] text-(--color-faint) hover:text-(--color-text)"
+        >
+          Annuller
+        </button>
+      </div>
     </div>
   );
 }

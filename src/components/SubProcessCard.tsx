@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { renameSubProcess } from "@/app/(customer)/processes/[processId]/[subId]/actions";
+import { deleteSubProcess, renameSubProcess } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 import { TriggerList } from "./TriggerList";
 import { AssigneeSelect } from "./AssigneeSelect";
 import { Badge, type Tone } from "./ui";
@@ -44,6 +44,13 @@ export function SubProcessCard({
   function saveName() {
     if (!name.trim() || name.trim() === sp.name) return;
     startTransition(() => renameSubProcess(processId, sp.id, name));
+  }
+
+  function remove(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`Slet underprocessen "${sp.name}"?`)) return;
+    startTransition(() => deleteSubProcess(processId, sp.id));
   }
 
   if (editing) {
@@ -111,15 +118,25 @@ export function SubProcessCard({
         sp.inScope ? "" : "opacity-60"
       }`}
     >
-      <button
-        onClick={() => setEditing(true)}
-        title="Rediger"
-        className="absolute right-2 top-2 rounded-md px-1.5 py-0.5 text-[11px] text-(--color-faint) opacity-0 transition-opacity hover:text-(--color-clay) group-hover:opacity-100"
-      >
-        Rediger
-      </button>
+      <div className="absolute right-2 top-2 flex gap-1 rounded-md bg-(--color-surface) opacity-70 transition-opacity group-hover:opacity-100">
+        <button
+          onClick={() => setEditing(true)}
+          title="Rediger"
+          className="rounded-md px-1.5 py-0.5 text-[11px] text-(--color-faint) hover:text-(--color-clay)"
+        >
+          Rediger
+        </button>
+        <button
+          onClick={remove}
+          disabled={pending}
+          title="Slet underproces"
+          className="rounded-md px-1.5 py-0.5 text-[11px] text-(--color-faint) hover:text-(--color-alert) disabled:opacity-40"
+        >
+          Slet
+        </button>
+      </div>
       <Link href={`/processes/${processId}/${sp.id}`} className="block">
-        <div className="flex items-start justify-between gap-3 pr-12">
+        <div className="flex items-start justify-between gap-3 pr-20">
           <div className="min-w-0">
             <div className="text-[14px] font-semibold">{sp.name}</div>
             <div className="mt-1 text-[11.5px] text-(--color-faint)">

@@ -31,11 +31,6 @@ export async function createCustomer(input: {
     return { error: "Udfyld virksomhed, engagement, navn og mail." };
   }
 
-  const existing = await db.user.findUnique({ where: { email: contactEmail } });
-  if (existing) {
-    return { error: "Der findes allerede en bruger med den mail." };
-  }
-
   const engagement = await db.$transaction(async (tx) => {
     const org = await tx.organization.create({
       data: { name: orgName, industry: input.industry.trim() || null },
@@ -115,37 +110,63 @@ export async function revokeAccess(engagementId: string, targetConsultantId: str
   revalidatePath(`/admin/customers/${engagementId}`);
 }
 
-// Sætter kundens session_uid-cookie til den valgte bruger, så konsulenten
-// reelt "bliver" den kunde i kundefladen — den funktion Jakob bad om helt
-// oprindeligt ("tilgå systemer som man som konsulent har fået adgang til").
-// Bevidst begrænset til KUN konsulentens EGEN brugerkonto (samme mail) —
-// Jakob afviste eksplicit at kunne åbne som navngivne medarbejdere som
-// Mette/Anders, selvom det var logget i audit-loggen. Konsulenten skal
-// selv være oprettet som bruger hos kunden (se UsersSection) for at have
-// noget at åbne.
-export async function impersonateUser(userId: string): Promise<never> {
+// Personlige indstillinger for konsulenten selv — mirror af kundens
+// updateOwnProfile (src/app/actions/profile.ts). Læser id'et fra sessionen,
+// aldrig fra klienten, så man ikke kan redigere en anden konsulents profil.
+export async function updateOwnConsultantProfile(name: string, title: string) {
+  const consultant = await requireConsultant();
+  if (!name.trim()) return;
+
+  await db.consultantAccount.update({
+    where: { id: consultant.id },
+    data: { name: name.trim(), title: title.trim() || null },
+  });
+  revalidatePath("/admin", "layout");
+}
+
+// Sætter kundens session_uid-cookie til konsulentens EGET sæde hos kunden,
+// så konsulenten reelt "bliver" kunden i kundefladen — den funktion Jakob bad
+// om helt oprindeligt ("tilgå systemer som man som konsulent har fået adgang
+// til"). Sædet (en User-række med consultantAccountId sat) oprettes/genbruges
+// automatisk her — konsulenten skal IKKE længere selv oprette sig i
+// Brugere-listen først, og enhver konsulent med adgang til engagementet kan
+// bruge den, uanset egen rolle. Bevidst umuligt at åbne som en navngiven
+// medarbejder (fx Mette/Anders): funktionen tager slet ikke imod et
+// bruger-id, kun engagementId — mailen er altid konsulentens egen.
+export async function openCustomerAsConsultant(engagementId: string): Promise<never> {
   const consultant = await requireConsultant();
 
-  const user = await db.user.findUnique({ where: { id: userId } });
-  if (!user) throw new Error("Bruger findes ikke.");
-
-  if (user.email.toLowerCase() !== consultant.email.toLowerCase()) {
-    throw new Error("Du kan kun åbne din egen brugerkonto hos kunden.");
-  }
-
-  const hasAccess = await db.consultantEngagementAccess.findFirst({
-    where: { consultantId: consultant.id, engagement: { organizationId: user.organizationId } },
+  const access = await db.consultantEngagementAccess.findFirst({
+    where: { consultantId: consultant.id, engagementId },
+    include: { engagement: true },
   });
-  if (!hasAccess) throw new Error("Ingen adgang til denne kundes organisation.");
+  if (!access) throw new Error("Ingen adgang til denne kundes organisation.");
+
+  const seat = await db.user.upsert({
+    where: {
+      organizationId_email: {
+        organizationId: access.engagement.organizationId,
+        email: consultant.email,
+      },
+    },
+    update: { name: consultant.name },
+    create: {
+      organizationId: access.engagement.organizationId,
+      email: consultant.email,
+      name: consultant.name,
+      role: "FDE",
+      consultantAccountId: consultant.id,
+    },
+  });
 
   await logAdminAction(consultant.id, "IMPERSONATE", {
     targetType: "User",
-    targetId: user.id,
-    detail: user.email,
+    targetId: seat.id,
+    detail: seat.email,
   });
 
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, user.id, {
+  jar.set(SESSION_COOKIE, seat.id, {
     httpOnly: true,
     sameSite: "lax",
     path: "/",

@@ -22,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <BreadcrumbProvider>
       <div className="flex h-full flex-col">
-        <AdminTopbar name={consultant.name} email={consultant.email} />
+        <AdminTopbar name={consultant.name} email={consultant.email} title={consultant.title} />
         <div className="flex flex-1 overflow-hidden">
           <AdminNav />
           <main className="flex-1 overflow-y-auto">{children}</main>

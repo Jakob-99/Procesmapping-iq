@@ -24,7 +24,7 @@ model Organization {
 
 model User {
   id             String       @id @default(cuid())
-  email          String       @unique
+  email          String
   name           String
   title          String?
   role           String // FDE | PROCESS_OWNER | EMPLOYEE | CUSTOMER_LEAD | PARTNER
@@ -32,11 +32,22 @@ model User {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
 
+  // Sat når rækken er en konsulents eget "sæde" i denne kunde-organisation
+  // (se openCustomerAsConsultant i app/admin/actions.ts), ikke en rigtig
+  // medarbejder — udelukker rækken fra det almindelige mail-login
+  // (ensureLoginCode), så en konsulents mail ikke skygger for en kundes.
+  consultantAccountId String?
+  consultantAccount   ConsultantAccount? @relation(fields: [consultantAccountId], references: [id], onDelete: SetNull)
+
   ownedProcesses Process[]     @relation("ProcessOwner")
   assignments    SubProcess[]  @relation("SubProcessOwner")
   interviews     Interview[]
   loginTokens    LoginToken[]
   hitlRequests   HitlRequest[]
+
+  // Mail er kun unik PR. organisation, ikke globalt — en konsulent kan have
+  // sit eget sæde hos flere kunder med samme mail.
+  @@unique([organizationId, email])
 }
 
 // Magic-link login: medarbejderen får en mail med et engangslink.
@@ -59,12 +70,14 @@ model ConsultantAccount {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String
+  title     String?
   role      String   @default("ADMIN") // ADMIN | CONSULTANT — rollestyring udbygges senere
   createdAt DateTime @default(now())
 
-  loginTokens ConsultantLoginToken[]
-  access      ConsultantEngagementAccess[]
-  auditLogs   AdminAuditLog[]
+  loginTokens   ConsultantLoginToken[]
+  access        ConsultantEngagementAccess[]
+  auditLogs     AdminAuditLog[]
+  customerSeats User[]
 }
 
 // Samme magic-kode-mønster som LoginToken (se lib/interview-auth.ts) — egen
@@ -130,7 +143,6 @@ model Engagement {
   improvements  Improvement[]
   brainChats    BrainChat[]
   hitlRequests  HitlRequest[]
-  reviewCycles  ReviewCycle[]
   consultantAccess ConsultantEngagementAccess[]
 }
 
@@ -143,6 +155,9 @@ model BusinessRole {
   name         String
   description  String?
   createdAt    DateTime   @default(now())
+
+  steps ProcessStep[]
+  lanes ProcessLane[] @relation("LaneActorRole")
 }
 
 // ----------------------------------------------------------- Systemer & data
@@ -170,6 +185,11 @@ model SystemRef {
 
   stepLinks StepSystem[]
   dataLinks DataObject[]
+  // Skridt der har DETTE system som aktør/svimlane (se ProcessStep.actorSystemId)
+  // — adskilt fra stepLinks (StepSystem), som er "systemet rører data her",
+  // ikke "systemet UDFØRER dette skridt".
+  actorSteps ProcessStep[] @relation("StepActorSystem")
+  lanes      ProcessLane[] @relation("LaneActorSystem")
 }
 
 // Et forretningsobjekt der flyder gennem processerne (Ordre, Kunde, Faktura...).
@@ -227,17 +247,50 @@ model SubProcess {
 
   status String @default("NOT_STARTED") // NOT_STARTED | INTERVIEW | DRAFT | IN_VALIDATION | VALIDATED | NEEDS_UPDATE
 
+  // Svimlanernes retning på lærredet — null/VERTICAL er lodrette kolonner
+  // side om side (forløbet går ned), HORIZONTAL er vandrette baner oven på
+  // hinanden (forløbet går til højre). Rent tegne-valg, ingen datamæssig
+  // betydning — se buildBpmnXml i lib/bpmn.ts.
+  laneOrientation String? // VERTICAL | HORIZONTAL
+
   bpmnXml   String? // BPMN 2.0 som XML — genereret af agenten
   summary   String? // agentens forretningsresumé
   sortOrder Int      @default(0)
   updatedAt DateTime @updatedAt
 
   steps        ProcessStep[]
+  lanes        ProcessLane[]
   interviews   Interview[]
   validations  Validation[]
   improvements Improvement[]
   experts      SubProcessExpert[]
   updatePolicy UpdatePolicy?
+}
+
+// En svimlane som et selvstændigt, brugerstyret objekt — ikke længere kun
+// udledt stiltiende af skridtenes aktør. Hver underproces har ALTID præcis
+// én isDefault-lane ("Proces", ingen aktør, oprettet sammen med
+// underprocessen) som samler skridt uden tildelt aktør — den kan hverken
+// slettes eller tildeles en aktør. Andre lanes bygges oven på den ved
+// eksplicit at vælge en rolle eller et system (se createLane/setLaneActor i
+// [subId]/actions.ts). Et skridts faktiske aktør er stadig
+// ProcessStep.actorRoleId/actorSystemId — sættes den til en aktør uden en
+// tilsvarende lane, selvhelbreder setStepActor ved at oprette lanen med det
+// samme, så de to aldrig kan løbe fra hinanden.
+model ProcessLane {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  isDefault    Boolean    @default(false)
+
+  actorRoleId String?
+  actorRole   BusinessRole? @relation("LaneActorRole", fields: [actorRoleId], references: [id], onDelete: SetNull)
+  actorSystemId String?
+  actorSystem   SystemRef? @relation("LaneActorSystem", fields: [actorSystemId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@unique([subProcessId, actorRoleId, actorSystemId])
 }
 
 // En medarbejder der er procesekspert på en underproces — modtager interview-mailen.
@@ -260,7 +313,17 @@ model ProcessStep {
 
   name        String
   description String?
-  actorRole   String? // hvem udfører skridtet
+  // Hvem udfører skridtet — en rigtig fremmednøgle til BusinessRole (ikke fri
+  // tekst), så et skridt ikke kan "referere" en rolle der ikke findes på
+  // /roles, og så rollelisten forbliver den eneste sandhed for rollenavne.
+  actorRoleId String?
+  actorRole   BusinessRole? @relation(fields: [actorRoleId], references: [id], onDelete: SetNull)
+  // Svimlanens aktør kan i stedet være et system (fx "CRM'et opretter selv
+  // ordrebekræftelsen") — nøjagtig ét af actorRoleId/actorSystemId er sat ad
+  // gangen, aldrig begge. At sætte denne opretter/genbruger automatisk et
+  // StepSystem-link for skridt+system (se setStepActor i actions.ts).
+  actorSystemId String?
+  actorSystem   SystemRef? @relation("StepActorSystem", fields: [actorSystemId], references: [id], onDelete: SetNull)
   stepType    String  @default("TASK") // TASK | DECISION | WAIT | HANDOFF
   isManual    Boolean @default(true)
 
@@ -491,26 +554,6 @@ model ImprovementLog {
   content      String
   status       String   @default("NEW") // NEW | REVIEWED | CONVERTED | CLOSED
   createdAt    DateTime @default(now())
-}
-
-// Processer beskriver hvad der gøres i dag — derfor et kvartalsvist eftersyn.
-model ReviewCycle {
-  id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  dueDate      DateTime
-  status       String     @default("OPEN") // OPEN | COMPLETED
-  createdAt    DateTime   @default(now())
-  items        ReviewItem[]
-}
-
-model ReviewItem {
-  id            String      @id @default(cuid())
-  reviewCycleId String
-  reviewCycle   ReviewCycle @relation(fields: [reviewCycleId], references: [id], onDelete: Cascade)
-  subProcessId  String
-  needsUpdate   Boolean?    // procesejeren krydser af
-  note          String?
 }
 
 // Styrer om og hvornår agenten selv skal holde øje med om en underproces'

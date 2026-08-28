@@ -125,6 +125,19 @@ async function main() {
     mkData("Leveringsaftale", "Aftalt dato og fragtmetode", excel.id),
   ]);
 
+  // ------------------------------------------------------------------- roller
+  const [ordrebehandlerRole, bogholderRole, lagerkoordinatorRole, lagermedarbejderRole] =
+    await Promise.all(
+      [
+        { name: "Ordrebehandler", description: "Modtager og opretter ordrer fra mail, telefon og EDI." },
+        { name: "Bogholder", description: "Kreditvurdering, fakturering og rykkerprocedure." },
+        { name: "Lagerkoordinator", description: "Planlægger pluk, pak og fragt." },
+        { name: "Lagermedarbejder", description: "Plukker og pakker varer fysisk på lageret." },
+        { name: "Salgschef", description: "Ejer Order to Cash. Sætter prioriteter for salg." },
+        { name: "Logistikchef", description: "Ejer Purchase to Pay og Plan to Produce." },
+      ].map((r) => db.businessRole.create({ data: { ...r, engagementId: engagement.id } })),
+    );
+
   // ------------------------------------------------------------------ proces
   const o2c = await db.process.create({
     data: {
@@ -259,7 +272,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Åbn fællespostkassen og sortér indbakken",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       frequency: "3 gange dagligt",
       durationMin: 20,
@@ -270,7 +283,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Slå kunden op i NAV",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       frequency: "ca. 40 gange dagligt",
       durationMin: 2,
@@ -281,7 +294,7 @@ async function main() {
       sub: ordremodtagelse.id,
       name: "Er kunden oprettet?",
       stepType: "DECISION",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       decisionCriteria: "Findes kundens CVR-nummer allerede i NAV?",
       output: "Ja → gå videre. Nej → opret ny kunde i NAV først.",
@@ -291,7 +304,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Tast ordrelinjer manuelt",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       frequency: "ca. 35 ordrer dagligt",
       durationMin: 8,
@@ -304,7 +317,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Tjek lagerbeholdning",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       durationMin: 3,
       painPoint: "Tallet i NAV er op til et døgn gammelt. Ved tvivl ringer hun til lageret.",
@@ -314,7 +327,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Noter afklaringer i eget regneark",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: true,
       frequency: "dagligt",
       durationMin: 10,
@@ -325,7 +338,7 @@ async function main() {
     {
       sub: ordremodtagelse.id,
       name: "Send ordrebekræftelse",
-      actorRole: "Ordrebehandler",
+      actorRoleId: ordrebehandlerRole.id,
       isManual: false,
       systems: [nav.id, mail.id],
       data: [ordre.id],
@@ -333,7 +346,7 @@ async function main() {
     {
       sub: kreditcheck.id,
       name: "Træk liste over ordrer over kreditmaks",
-      actorRole: "Bogholder",
+      actorRoleId: bogholderRole.id,
       isManual: true,
       frequency: "dagligt",
       durationMin: 15,
@@ -343,7 +356,7 @@ async function main() {
     {
       sub: kreditcheck.id,
       name: "Vurdér kundens betalingshistorik",
-      actorRole: "Bogholder",
+      actorRoleId: bogholderRole.id,
       isManual: true,
       durationMin: 10,
       painPoint: "Ingen fast regel. Vurderingen sidder i hovedet på Louise.",
@@ -354,7 +367,7 @@ async function main() {
       sub: kreditcheck.id,
       name: "Frigiv eller hold ordren",
       stepType: "DECISION",
-      actorRole: "Bogholder",
+      actorRoleId: bogholderRole.id,
       isManual: true,
       decisionCriteria: "Er kunden inden for kreditmaks, og er betalingshistorikken ren?",
       output: "Frigivet → videre til lager. Holdt → salg kontaktes for afklaring.",
@@ -364,7 +377,7 @@ async function main() {
     {
       sub: plukPak.id,
       name: "Modtag plukliste i WMS",
-      actorRole: "Lagerkoordinator",
+      actorRoleId: lagerkoordinatorRole.id,
       isManual: false,
       systems: [wms.id],
       data: [ordre.id, lager.id],
@@ -372,7 +385,7 @@ async function main() {
     {
       sub: plukPak.id,
       name: "Pluk varer på lager",
-      actorRole: "Lagermedarbejder",
+      actorRoleId: lagermedarbejderRole.id,
       isManual: true,
       frequency: "ca. 35 ordrer dagligt",
       durationMin: 12,
@@ -382,7 +395,7 @@ async function main() {
     {
       sub: plukPak.id,
       name: "Book fragt",
-      actorRole: "Lagerkoordinator",
+      actorRoleId: lagerkoordinatorRole.id,
       isManual: true,
       durationMin: 6,
       painPoint: "Fragtvalg sker manuelt ud fra erfaring — ikke pris eller leveringstid.",
@@ -398,7 +411,7 @@ async function main() {
       data: {
         subProcessId: s.sub,
         name: s.name,
-        actorRole: s.actorRole,
+        actorRoleId: s.actorRoleId,
         stepType: s.stepType ?? "TASK",
         isManual: s.isManual ?? true,
         frequency: s.frequency,
@@ -425,7 +438,7 @@ async function main() {
       data: {
         subProcessId: plukPak.id,
         name: "Stikprøvekontrol af pluk",
-        actorRole: "Lagermedarbejder",
+        actorRoleId: lagermedarbejderRole.id,
         isManual: true,
         lane: 1,
         branchFromId: plukStepId,
@@ -523,18 +536,6 @@ async function main() {
         tags: JSON.stringify(["integration", "lager", "master data"]),
       },
     ],
-  });
-
-  // ------------------------------------------------------------------- roller
-  await db.businessRole.createMany({
-    data: [
-      { name: "Ordrebehandler", description: "Modtager og opretter ordrer fra mail, telefon og EDI." },
-      { name: "Bogholder", description: "Kreditvurdering, fakturering og rykkerprocedure." },
-      { name: "Lagerkoordinator", description: "Planlægger pluk, pak og fragt." },
-      { name: "Lagermedarbejder", description: "Plukker og pakker varer fysisk på lageret." },
-      { name: "Salgschef", description: "Ejer Order to Cash. Sætter prioriteter for salg." },
-      { name: "Logistikchef", description: "Ejer Purchase to Pay og Plan to Produce." },
-    ].map((r) => ({ ...r, engagementId: engagement.id })),
   });
 
   // ---------------------------------------------------------- forbedringer & AIOS

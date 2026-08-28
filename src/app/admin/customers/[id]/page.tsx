@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireConsultant } from "@/lib/consultant-session";
-import { impersonateUser } from "@/app/admin/actions";
+import { openCustomerAsConsultant } from "@/app/admin/actions";
 import { PageHeader } from "@/components/PageHeader";
 import { Panel, Badge, OutlineButton } from "@/components/ui";
 import { UsersSection } from "@/components/OrgSettingsModal";
@@ -42,13 +42,6 @@ export default async function CustomerDetailPage({
   const withAccessIds = new Set(engagement.consultantAccess.map((a) => a.consultantId));
   const allConsultants = await db.consultantAccount.findMany({ orderBy: { name: "asc" } });
 
-  // "Åbn som kunde" er bevidst begrænset til konsulentens EGEN brugerkonto
-  // hos denne kunde (samme mail) — ikke navngivne medarbejdere som Mette
-  // eller Anders, selvom det havde været muligt at logge det i audit-loggen.
-  const ownUser = organization.users.find(
-    (u) => u.email.toLowerCase() === consultant.email.toLowerCase(),
-  );
-
   return (
     <div>
       <SetBreadcrumb
@@ -82,22 +75,13 @@ export default async function CustomerDetailPage({
           />
         </div>
 
-        <Panel eyebrow="Kundeflade" title="Åbn som kunde" className="sm:col-span-3" bodyClass="pt-1">
-          {ownUser ? (
-            <>
-              <p className="mb-3 text-[12px] text-(--color-faint)">
-                Logger dig ind i kundefladen med din egen brugerkonto hos denne kunde.
-              </p>
-              <form action={impersonateUser.bind(null, ownUser.id)}>
-                <OutlineButton type="submit">Åbn som {ownUser.name}</OutlineButton>
-              </form>
-            </>
-          ) : (
-            <p className="text-[12px] text-(--color-faint)">
-              Du har ingen brugerkonto hos denne kunde endnu — tilføj dig selv som bruger
-              ovenfor med din egen mail ({consultant.email}) for at kunne åbne kundefladen.
-            </p>
-          )}
+        <Panel eyebrow="Kundeflade" title="Log ind hos kunde" className="sm:col-span-3" bodyClass="pt-1">
+          <p className="mb-3 text-[12px] text-(--color-faint)">
+            Logger dig ind i kundefladen som dig selv ({consultant.email}).
+          </p>
+          <form action={openCustomerAsConsultant.bind(null, engagement.id)}>
+            <OutlineButton type="submit">Log ind hos kunde</OutlineButton>
+          </form>
         </Panel>
 
         <div className="sm:col-span-3">

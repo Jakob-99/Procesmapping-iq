@@ -41,10 +41,57 @@ export type BpmnEditorHandle = {
   getOrderedNodes: () => DiagramNode[];
 };
 
-// Start og slut styres altid af underprocessens egne felter — de kan ikke
-// slettes eller omdøbes i tegningen, uanset hvad brugeren prøver. Der kan
-// være flere af hver ("StartEvent_0", "StartEvent_1", ...), én pr. hændelse.
-const isLockedId = (id: string) => id.startsWith("StartEvent_") || id.startsWith("EndEvent_");
+export type ElementClickInfo =
+  | { kind: "task" | "ctxIn" | "ctxOut" | "system"; stepId: string }
+  | { kind: "lane"; laneId: string }
+  // Et aktivitets-/gateway-ikon brugeren lige har tegnet selv, som endnu ikke
+  // er gemt og derfor ikke har et rigtigt ProcessStep-id (bpmn-js's egen
+  // auto-id starter med "Activity_"/"Gateway_", ikke vores "Task_"/"Gateway_
+  // <rigtigt id>") — se FLOW_TYPES-tjekket i eventBus-lytteren nedenfor.
+  | { kind: "unsaved" };
+
+// Start og slut styres altid af underprocessens egne felter, og svimlanens
+// navn styres altid af skridtenes actorRoleId/actorSystemId (se setStepActor)
+// — ingen af dem kan slettes eller omdøbes direkte i tegningen, uanset hvad
+// brugeren prøver (bpmn-js's indbyggede dobbeltklik-til-at-omdøbe ville ellers
+// lade en skrive en fri tekst ind som aldrig gemmes nogen steder — precis det
+// der skal undgås, aktøren vælges kun via Skridtdetaljer-panelet). Der kan
+// være flere af start/slut ("StartEvent_0", "StartEvent_1", ...), én pr.
+// hændelse.
+const isLockedId = (id: string) =>
+  id.startsWith("StartEvent_") || id.startsWith("EndEvent_") || id.startsWith("Lane_");
+
+const CLICK_KIND: Record<string, ElementClickInfo["kind"]> = {
+  Task: "task",
+  CtxIn: "ctxIn",
+  CtxOut: "ctxOut",
+  Sys: "system",
+};
+
+// Genkender klik på et skridt eller en af dets tilknyttede bokse (kontekst
+// eller systemer) og finder tilbage til det rigtige ProcessStep-id — samme
+// præfiks-strip som stepIdFromNodeId på serveren (se
+// processes/[processId]/[subId]/actions.ts), da id'et er sat med samme nid()
+// (lib/bpmn.ts). Labels er et separat diagram-js-element med samme
+// id-præfiks/navn som deres mål og skal ALDRIG matches her (se
+// bpmn-canvas-editor-memoryens faldgrube #1) — ellers "åbner" et klik på selve
+// teksten under et ikon panelet lige så vel som et klik på ikonet.
+//
+// En svimlane (Lane_<ProcessLane.id>, se lib/bpmn.ts) matcher samme mønster
+// — ProcessLane-id'er er cuid'er (kun bogstaver/tal), så nid()'s
+// tegn-oprensning er et no-op og laneId'et ruller tilbage 1:1, uden tab.
+function classifyClick(el: {
+  id: string;
+  type?: string;
+  labelTarget?: unknown;
+}): ElementClickInfo | null {
+  if (el.type === "label" || el.labelTarget || el.id.endsWith("_label")) return null;
+  const m = el.id.match(/^(Task|CtxIn|CtxOut|Sys)_(.+)$/);
+  if (m) return { stepId: m[2], kind: CLICK_KIND[m[1]] } as ElementClickInfo;
+  const laneMatch = el.id.match(/^Lane_(.+)$/);
+  if (laneMatch) return { kind: "lane", laneId: laneMatch[1] };
+  return null;
+}
 
 const FLOW_TYPES = new Set([
   "bpmn:Task",
@@ -103,7 +150,24 @@ export const BpmnViewer = forwardRef<BpmnEditorHandle, {
   bare?: boolean;
   editable?: boolean;
   onDirty?: () => void;
-}>(function BpmnViewer({ xml, className = "h-[380px]", bare = false, editable = false, onDirty }, ref) {
+  onElementClick?: (info: ElementClickInfo) => void;
+  // Bruges af "+"-ikonerne bpmn-js selv tegner ved en svimlane (context pad,
+  // se overridet nedenfor) — kaldes med den svimlane konteksten blev åbnet
+  // fra, så overfladen kan placere sin egen (ikke-sidebjælke) svimlane-editor
+  // tæt på den samme svimlane.
+  onAddLaneRequested?: (nearLaneId: string) => void;
+}>(function BpmnViewer(
+  {
+    xml,
+    className = "h-[380px]",
+    bare = false,
+    editable = false,
+    onDirty,
+    onElementClick,
+    onAddLaneRequested,
+  },
+  ref,
+) {
   const hostRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ModelerInstance | null>(null);
   const canvasRef = useRef<CanvasModule | null>(null);
@@ -162,6 +226,58 @@ export const BpmnViewer = forwardRef<BpmnEditorHandle, {
             if (e.element && isLockedId(e.element.id)) return false;
           });
           eventBus.on("commandStack.changed", 1000, () => onDirty?.());
+          eventBus.on("element.click", 1000, (e) => {
+            const el = e.element as
+              | { id: string; type?: string; labelTarget?: unknown; businessObject?: { $type?: string } }
+              | undefined;
+            if (!el) return;
+            const info = classifyClick(el);
+            if (info) return onElementClick?.(info);
+            // Et hånd-tegnet aktivitets-/gateway-ikon uden et rigtigt
+            // ProcessStep-id endnu (se ElementClickInfo["unsaved"]) — skal
+            // stadig åbne Skridtdetaljer, ikke gøre ingenting.
+            if (el.type === "label" || el.labelTarget || el.id.endsWith("_label")) return;
+            if (el.businessObject?.$type && FLOW_TYPES.has(el.businessObject.$type)) {
+              onElementClick?.({ kind: "unsaved" });
+            }
+          });
+
+          // bpmn-js's egne "+"-ikoner ved en valgt svimlane (Add lane above/
+          // below) redigerer strukturen direkte i det levende bpmn-js-diagram
+          // — men vores tegning er aldrig et dokument, den regenereres fra
+          // ProcessLane/ProcessStep hver gang (se lib/bpmn.ts), så en sådan
+          // strukturel ændring ville bare forsvinde ved næste re-render uden
+          // nogensinde at være gemt. "Divide into lanes" giver slet ingen
+          // mening (deler én lane i flere uden nogen aktør-tilknytning).
+          // Erstat dem i stedet med vores egen "opret svimlane"-handling —
+          // samme ikoner, samme placering (brugeren beder om "+ ved poolen"),
+          // men koblet til den rigtige datamodel. Lavere prioritet (500) end
+          // standard-context-pad'ets default — den behandles sidst i
+          // reduce'en og kan derfor overskrive/slette entries den allerede
+          // har sat (samme mønster som CtxPaletteProvider i
+          // bpmnCustomRenderer.ts).
+          const contextPad = v.get("contextPad") as {
+            registerProvider: (priority: number, provider: unknown) => void;
+          };
+          contextPad.registerProvider(500, {
+            getContextPadEntries(element: { id: string; businessObject?: { $type?: string } }) {
+              return (entries: Record<string, { action?: unknown } | undefined>) => {
+                if (element.businessObject?.$type !== "bpmn:Lane") return entries;
+                delete entries["lane-divide-two"];
+                delete entries["lane-divide-three"];
+                // Samme "Lane_<ProcessLane.id>"-præfiks-strip som classifyClick.
+                const laneId = element.id.replace(/^Lane_/, "");
+                const addLane = { click: () => onAddLaneRequested?.(laneId) };
+                if (entries["lane-insert-above"]) {
+                  entries["lane-insert-above"] = { ...entries["lane-insert-above"], action: addLane };
+                }
+                if (entries["lane-insert-below"]) {
+                  entries["lane-insert-below"] = { ...entries["lane-insert-below"], action: addLane };
+                }
+                return entries;
+              };
+            },
+          });
         }
 
         // bpmn-js cacher sin egen viewport-størrelse ved opstart — hvis

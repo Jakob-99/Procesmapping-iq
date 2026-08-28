@@ -3,9 +3,18 @@
 
   Vi gemmer ikke tegningen — vi tegner den. Det betyder at diagrammet aldrig kan
   komme ud af trit med data: retter nogen et skridt, ændrer tegningen sig med.
-  Layoutet er bevidst simpelt (oppefra og ned), med en svimlane-kolonne pr.
-  rolle når mere end én rolle optræder, og dataobjekter hængt på de skridt der
-  rører dem.
+  Layoutet er bevidst simpelt, med en svimlane pr. aktør (rolle eller system)
+  når mere end én aktør optræder, og dataobjekter hængt på de skridt der rører
+  dem.
+
+  Retning (se SubProcess.laneOrientation): som udgangspunkt (VERTICAL) er
+  svimlanerne lodrette kolonner side om side, og forløbet går ned (Y vokser).
+  Vælger brugeren HORIZONTAL, bliver svimlanerne vandrette baner oven på
+  hinanden, og forløbet går til højre (X vokser) i stedet. Al layout-matematik
+  herunder er skrevet i abstrakte "main"/"cross"-akser (main = retningen
+  forløbet bevæger sig i, cross = retningen svimlanerne ligger fordelt i) og
+  omregnes til rigtige x/y kun via toXY() — så begge retninger er den samme
+  kode, ikke to parallelle implementeringer der kan løbe fra hinanden.
 */
 
 type Step = {
@@ -13,9 +22,19 @@ type Step = {
   name: string;
   stepType: string;
   isManual: boolean;
-  actorRole: string | null;
+  // Rollens ELLER systemets navn, alt efter hvad aktøren er (se
+  // ProcessStep.actorRoleId/actorSystemId) — én lane-nøgle uanset hvilken af
+  // de to det er.
+  actor: string | null;
   data?: { direction: string | null }[];
+  systems?: unknown[];
 };
+
+// Svimlanerne er nu et selvstændigt, brugerstyret objekt (ProcessLane) —
+// ikke længere kun stiltiende udledt af hvilke aktører der forekommer blandt
+// skridtene. Der er ALTID mindst én (isDefault, ingen aktør) — se
+// ownership/[subId]/actions.ts's createLane/setLaneActor/setStepActor.
+type Lane = { id: string; isDefault: boolean; actorName: string | null };
 
 const esc = (s: string) =>
   s
@@ -34,15 +53,25 @@ const GATE = 50;
 const EVENT = 36;
 const LANE_W = 220;
 const DATA_OBJ = 40;
-const SHARED_LANE = "__shared__";
+const DATA_OBJ_W = DATA_OBJ * 0.7;
 
 export function buildBpmnXml(opts: {
   subProcessName: string;
   startEvents?: string[];
   endEvents?: string[];
   steps: Step[];
+  orientation?: "VERTICAL" | "HORIZONTAL";
+  lanes: Lane[];
 }) {
   const { steps } = opts;
+  const HORIZONTAL = opts.orientation === "HORIZONTAL";
+
+  // Eneste sted retningen faktisk forgrener koden — alt andet er skrevet i
+  // main/cross og går igennem her.
+  const toXY = (main: number, cross: number) =>
+    HORIZONTAL ? { x: main, y: cross } : { x: cross, y: main };
+  const mainSize = (w: number, h: number) => (HORIZONTAL ? w : h);
+  const crossSize = (w: number, h: number) => (HORIZONTAL ? h : w);
 
   type Node = {
     id: string;
@@ -55,50 +84,50 @@ export function buildBpmnXml(opts: {
     lane: string;
   };
 
-  // Svimlaner — én kolonne pr. rolle, så snart mindst én aktør er sat.
-  const roles = Array.from(
-    new Set(steps.filter((s) => s.actorRole).map((s) => s.actorRole as string)),
+  // Svimlaner — altid mindst den ene fundamentale (isDefault, ingen aktør,
+  // se Lane ovenfor), plus én bane pr. anden aktør (rolle ELLER system) i den
+  // rækkefølge de blev bygget oven på den. Rene ProcessLane-id'er bruges som
+  // nøgle, ikke aktørnavnet — så BpmnViewer kan finde tilbage til den rigtige
+  // databaserække ved klik uden tab-behæftet id-oprensning.
+  const lanes = opts.lanes;
+  const defaultLane = lanes.find((l) => l.isDefault) ?? lanes[0];
+  const laneCross = new Map(lanes.map((l, i) => [l.id, i * LANE_W]));
+  const nameToLaneId = new Map(
+    lanes.filter((l) => !l.isDefault && l.actorName).map((l) => [l.actorName as string, l.id]),
   );
-  const hasUnassigned = steps.some((s) => !s.actorRole);
-  const useLanes = roles.length > 0;
-  const laneKeys = useLanes ? [...(hasUnassigned ? [SHARED_LANE] : []), ...roles] : [];
-  const laneX = new Map(laneKeys.map((k, i) => [k, i * LANE_W]));
-  const laneOf = (s: { actorRole: string | null }) =>
-    useLanes ? s.actorRole ?? SHARED_LANE : null;
-  const centerX = (lane: string | null, w: number) =>
-    lane === null ? (LANE_W - w) / 2 : (laneX.get(lane) ?? 0) + (LANE_W - w) / 2;
-  const totalWidth = useLanes ? laneKeys.length * LANE_W : LANE_W;
+  const laneLabel = new Map(lanes.map((l) => [l.id, l.isDefault ? "Proces" : (l.actorName ?? "Proces")]));
+  const laneOf = (s: { actor: string | null }) =>
+    (s.actor ? nameToLaneId.get(s.actor) : undefined) ?? defaultLane.id;
+  const centerCross = (lane: string, size: number) =>
+    (laneCross.get(lane) ?? 0) + (LANE_W - size) / 2;
+  const totalCross = lanes.length * LANE_W;
 
   const nodes: Node[] = [];
-  let y = 60;
+  let mainPos = 60;
 
-  const push = (id: string, tag: string, name: string, w: number, h: number, lane: string | null) => {
-    nodes.push({ id, tag, name, w, h, x: centerX(lane, w), y, lane: lane ?? SHARED_LANE });
-    y += h + GAP;
+  const push = (id: string, tag: string, name: string, w: number, h: number, lane: string) => {
+    const { x, y } = toXY(mainPos, centerCross(lane, crossSize(w, h)));
+    nodes.push({ id, tag, name, w, h, x, y, lane });
+    mainPos += mainSize(w, h) + GAP;
   };
 
   // Flere starter/slutter-hændelser tegnes som hver sin cirkel side om side —
   // ikke som ét samlet navn — så det er tydeligt at underprocessen kan
-  // udløses eller afsluttes ad flere veje.
-  const layoutRow = (names: string[], rowY: number, idPrefix: string, tag: string): Node[] => {
-    const rowWidth = names.length * EVENT + (names.length - 1) * 20;
-    const rowStartX = (totalWidth - rowWidth) / 2;
-    return names.map((name, i) => ({
-      id: `${idPrefix}_${i}`,
-      tag,
-      name,
-      w: EVENT,
-      h: EVENT,
-      x: rowStartX + i * (EVENT + 20),
-      y: rowY,
-      lane: SHARED_LANE,
-    }));
+  // udløses eller afsluttes ad flere veje. "Side om side" betyder langs
+  // cross-aksen, ved en fast main-position.
+  const layoutRow = (names: string[], rowMain: number, idPrefix: string, tag: string): Node[] => {
+    const rowCrossSpan = names.length * EVENT + (names.length - 1) * 20;
+    const rowStartCross = (totalCross - rowCrossSpan) / 2;
+    return names.map((name, i) => {
+      const { x, y } = toXY(rowMain, rowStartCross + i * (EVENT + 20));
+      return { id: `${idPrefix}_${i}`, tag, name, w: EVENT, h: EVENT, x, y, lane: defaultLane.id };
+    });
   };
 
   const startNames = opts.startEvents?.length ? opts.startEvents : ["Start"];
-  const startNodes = layoutRow(startNames, y, "StartEvent", "startEvent");
+  const startNodes = layoutRow(startNames, mainPos, "StartEvent", "startEvent");
   nodes.push(...startNodes);
-  y += EVENT + GAP;
+  mainPos += EVENT + GAP;
 
   const mainNodes: Node[] = [];
   for (const s of steps) {
@@ -114,9 +143,9 @@ export function buildBpmnXml(opts: {
   }
 
   const endNames = opts.endEvents?.length ? opts.endEvents : ["Slut"];
-  const endNodes = layoutRow(endNames, y, "EndEvent", "endEvent");
+  const endNodes = layoutRow(endNames, mainPos, "EndEvent", "endEvent");
   nodes.push(...endNodes);
-  y += EVENT + GAP;
+  mainPos += EVENT + GAP;
 
   // Bipartit: hver start peger ind i det første skridt, skridtene kæder sig
   // som før, og det sidste skridt peger ud til hver slut-hændelse. Uden
@@ -140,36 +169,53 @@ export function buildBpmnXml(opts: {
   // bruge for at udføre skridtet (dataobjekt-ikonet, tynd kant — som
   // starthændelsen), "Output kontekst" er det skridtet efterlader
   // (datalager-ikonet, tyk kant — som sluthændelsen). To forskellige figurer,
-  // ikke bare to farver af den samme.
-  type DataNode = { id: string; name: string; x: number; y: number; kind: "in" | "out" };
+  // ikke bare to farver af den samme. Systemer-boksen er en tredje, samlet
+  // boks pr. skridt. Alle tre placeres langs CROSS-aksen (side om side med
+  // skridtet, ikke foran/efter det i forløbet) — kontekst-boksene på den
+  // positive side, systemer-boksen på den negative.
+  type DataNode = { id: string; name: string; x: number; y: number; kind: "in" | "out" | "sys" };
   const dataNodes: DataNode[] = [];
   const dataAssocs: { id: string; from: string; to: string }[] = [];
 
+  const taskMainCenter = (task: Node) => (HORIZONTAL ? task.x + task.w / 2 : task.y + task.h / 2);
+
   for (const s of steps) {
-    if (s.stepType === "DECISION" || !s.data?.length) continue;
+    if (s.stepType === "DECISION") continue;
     const taskId = nid("Task", s.id);
     const task = nodes.find((n) => n.id === taskId);
     if (!task) continue;
 
-    const hasIn = s.data.some((d) => d.direction !== "OUTPUT");
-    const hasOut = s.data.some((d) => d.direction === "OUTPUT" || d.direction === "BOTH");
+    if (s.data?.length) {
+      const hasIn = s.data.some((d) => d.direction !== "OUTPUT");
+      const hasOut = s.data.some((d) => d.direction === "OUTPUT" || d.direction === "BOTH");
 
-    const slots: { kind: "in" | "out"; name: string }[] = [
-      ...(hasIn ? [{ kind: "in" as const, name: "Input kontekst" }] : []),
-      ...(hasOut ? [{ kind: "out" as const, name: "Output kontekst" }] : []),
-    ];
+      const slots: { kind: "in" | "out"; name: string }[] = [
+        ...(hasIn ? [{ kind: "in" as const, name: "Input kontekst" }] : []),
+        ...(hasOut ? [{ kind: "out" as const, name: "Output kontekst" }] : []),
+      ];
 
-    slots.forEach((slot, i) => {
-      const dObjId = nid(slot.kind === "in" ? "CtxIn" : "CtxOut", s.id);
-      dataNodes.push({
-        id: dObjId,
-        name: slot.name,
-        x: task.x + task.w + 40,
-        y: task.y + task.h / 2 - DATA_OBJ / 2 + i * (DATA_OBJ + 12),
-        kind: slot.kind,
+      slots.forEach((slot, i) => {
+        const dObjId = nid(slot.kind === "in" ? "CtxIn" : "CtxOut", s.id);
+        const crossOut = (HORIZONTAL ? task.y + task.h : task.x + task.w) + 40;
+        const main = taskMainCenter(task) - mainSize(DATA_OBJ_W, DATA_OBJ) / 2 + i * (mainSize(DATA_OBJ_W, DATA_OBJ) + 12);
+        const { x, y } = toXY(main, crossOut);
+        dataNodes.push({ id: dObjId, name: slot.name, x, y, kind: slot.kind });
+        dataAssocs.push({ id: nid("DataAssoc", `${s.id}_${slot.kind}`), from: taskId, to: dObjId });
       });
-      dataAssocs.push({ id: nid("DataAssoc", `${s.id}_${slot.kind}`), from: taskId, to: dObjId });
-    });
+    }
+
+    // Systemer-boksen — én samlet boks pr. skridt uanset hvor mange konkrete
+    // StepSystem-koblinger der er, ligesom Input/Output kontekst — placeret
+    // på cross-aksens NEGATIVE side af skridtet, så den ikke kolliderer med
+    // kontekst-boksene (positiv side).
+    if (s.systems?.length) {
+      const sysId = nid("Sys", s.id);
+      const crossIn = (HORIZONTAL ? task.y : task.x) - 40 - crossSize(DATA_OBJ_W, DATA_OBJ);
+      const main = taskMainCenter(task) - mainSize(DATA_OBJ_W, DATA_OBJ) / 2;
+      const { x, y } = toXY(main, crossIn);
+      dataNodes.push({ id: sysId, name: "Systemer", x, y, kind: "sys" });
+      dataAssocs.push({ id: nid("DataAssoc", `${s.id}_sys`), from: taskId, to: sysId });
+    }
   }
 
   const elements = nodes
@@ -205,17 +251,15 @@ export function buildBpmnXml(opts: {
     )
     .join("\n");
 
-  const laneSetXml = useLanes
-    ? `    <bpmn:laneSet id="LaneSet_1">\n${laneKeys
-        .map((k) => {
-          const refs = nodes
-            .filter((n) => n.lane === k)
-            .map((n) => `        <bpmn:flowNodeRef>${n.id}</bpmn:flowNodeRef>`)
-            .join("\n");
-          return `      <bpmn:lane id="${nid("Lane", k)}" name="${esc(k === SHARED_LANE ? "Proces" : k)}">\n${refs}\n      </bpmn:lane>`;
-        })
-        .join("\n")}\n    </bpmn:laneSet>`
-    : "";
+  const laneSetXml = `    <bpmn:laneSet id="LaneSet_1">\n${lanes
+    .map((l) => {
+      const refs = nodes
+        .filter((n) => n.lane === l.id)
+        .map((n) => `        <bpmn:flowNodeRef>${n.id}</bpmn:flowNodeRef>`)
+        .join("\n");
+      return `      <bpmn:lane id="${nid("Lane", l.id)}" name="${esc(laneLabel.get(l.id) ?? "Proces")}">\n${refs}\n      </bpmn:lane>`;
+    })
+    .join("\n")}\n    </bpmn:laneSet>`;
 
   const shapes = nodes
     .map(
@@ -230,32 +274,49 @@ export function buildBpmnXml(opts: {
     .map(
       (d) =>
         `      <bpmndi:BPMNShape id="${d.id}_di" bpmnElement="${d.id}">\n` +
-        `        <dc:Bounds x="${d.x}" y="${d.y}" width="${DATA_OBJ * 0.7}" height="${DATA_OBJ}" />\n` +
+        `        <dc:Bounds x="${d.x}" y="${d.y}" width="${DATA_OBJ_W}" height="${DATA_OBJ}" />\n` +
         `      </bpmndi:BPMNShape>`,
     )
     .join("\n");
 
-  const laneTop = 20;
-  const laneBottom = y + 20;
-  const laneShapes = useLanes
-    ? laneKeys
-        .map(
-          (k) =>
-            `      <bpmndi:BPMNShape id="${nid("Lane", k)}_di" bpmnElement="${nid("Lane", k)}" isHorizontal="false">\n` +
-            `        <dc:Bounds x="${laneX.get(k)}" y="${laneTop}" width="${LANE_W}" height="${laneBottom - laneTop}" />\n` +
-            `      </bpmndi:BPMNShape>`,
-        )
-        .join("\n")
-    : "";
+  const mainAxisStart = 20;
+  const mainAxisEnd = mainPos + 20;
+  const laneShapes = lanes
+        .map((l) => {
+          const cross = laneCross.get(l.id) ?? 0;
+          const bounds = HORIZONTAL
+            ? { x: mainAxisStart, y: cross, width: mainAxisEnd - mainAxisStart, height: LANE_W }
+            : { x: cross, y: mainAxisStart, width: LANE_W, height: mainAxisEnd - mainAxisStart };
+          return (
+            `      <bpmndi:BPMNShape id="${nid("Lane", l.id)}_di" bpmnElement="${nid("Lane", l.id)}" isHorizontal="${HORIZONTAL}">\n` +
+            `        <dc:Bounds x="${bounds.x}" y="${bounds.y}" width="${bounds.width}" height="${bounds.height}" />\n` +
+            `      </bpmndi:BPMNShape>`
+          );
+        })
+        .join("\n");
+
+  // Kant-punkt for en pil ind/ud af en figur langs main-aksen (den led
+  // forløbet faktisk bevæger sig ad), centreret på cross-aksen.
+  const mainEdgeCross = (n: Node) => (HORIZONTAL ? n.y + n.h / 2 : n.x + n.w / 2);
+  const flowPoint = (n: Node, side: "far" | "near") => {
+    const main = HORIZONTAL
+      ? side === "far"
+        ? n.x + n.w
+        : n.x
+      : side === "far"
+        ? n.y + n.h
+        : n.y;
+    return toXY(main, mainEdgeCross(n));
+  };
 
   const edges = flows
     .map((f) => {
-      const x1 = f.from.x + f.from.w / 2;
-      const x2 = f.to.x + f.to.w / 2;
+      const p1 = flowPoint(f.from, "far");
+      const p2 = flowPoint(f.to, "near");
       return (
         `      <bpmndi:BPMNEdge id="${f.id}_di" bpmnElement="${f.id}">\n` +
-        `        <di:waypoint x="${x1}" y="${f.from.y + f.from.h}" />\n` +
-        `        <di:waypoint x="${x2}" y="${f.to.y}" />\n` +
+        `        <di:waypoint x="${p1.x}" y="${p1.y}" />\n` +
+        `        <di:waypoint x="${p2.x}" y="${p2.y}" />\n` +
         `      </bpmndi:BPMNEdge>`
       );
     })
@@ -265,10 +326,21 @@ export function buildBpmnXml(opts: {
     .map((a) => {
       const task = nodes.find((n) => n.id === a.from)!;
       const data = dataNodes.find((n) => n.id === a.to)!;
+      // Systemer-boksen sidder på cross-aksens negative side af skridtet,
+      // kontekst-boksene på den positive — pilen skal starte fra den kant der
+      // faktisk vender mod boksen.
+      const taskCross = data.kind === "sys" ? (HORIZONTAL ? task.y : task.x) : (HORIZONTAL ? task.y + task.h : task.x + task.w);
+      const p1 = toXY(taskMainCenter(task), taskCross);
+      // Boksens egen main-center (IKKE skridtets) — ved flere kontekst-bokse
+      // pr. skridt (Input OG Output) sidder de forskudt langs main-aksen, så
+      // hver pil skal pege på sin egen boks' faktiske position.
+      const dataCross = HORIZONTAL ? data.y : data.x;
+      const dataMain = HORIZONTAL ? data.x + DATA_OBJ_W / 2 : data.y + DATA_OBJ / 2;
+      const p2 = toXY(dataMain, dataCross);
       return (
         `      <bpmndi:BPMNEdge id="${a.id}_di" bpmnElement="${a.id}">\n` +
-        `        <di:waypoint x="${task.x + task.w}" y="${task.y + task.h / 2}" />\n` +
-        `        <di:waypoint x="${data.x}" y="${data.y + DATA_OBJ / 2}" />\n` +
+        `        <di:waypoint x="${p1.x}" y="${p1.y}" />\n` +
+        `        <di:waypoint x="${p2.x}" y="${p2.y}" />\n` +
         `      </bpmndi:BPMNEdge>`
       );
     })

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { ensureLoginCode } from "@/lib/interview-auth";
+import { assertProcessOwnership } from "@/lib/ownership";
 
 // Procesejeren opretter en ny end-to-end proces i procesmodellen — kerne eller støtte.
 export async function createProcess(name: string, category: "CORE" | "SUPPORT") {
@@ -33,11 +34,12 @@ export async function createSubProcess(
   endEvent?: string,
 ) {
   if (!name.trim()) return;
+  await assertProcessOwnership(processId);
   const last = await db.subProcess.findFirst({
     where: { processId },
     orderBy: { sortOrder: "desc" },
   });
-  await db.subProcess.create({
+  const sp = await db.subProcess.create({
     data: {
       processId,
       name: name.trim(),
@@ -46,12 +48,21 @@ export async function createSubProcess(
       sortOrder: (last?.sortOrder ?? -1) + 1,
     },
   });
+  // Den grundlæggende svimlane — findes altid, kan ikke slettes eller
+  // tildeles en aktør, se ProcessLane i schema.prisma. Andre svimlaner bygges
+  // op oven på den via createLane/setStepActor.
+  await db.processLane.create({ data: { subProcessId: sp.id, isDefault: true } });
   revalidatePath(`/processes`);
+  revalidatePath(`/processes/${processId}`);
 }
 
 // Procesejeren trækker selv rundt på kortene i procesmodellen — rækkefølgen
 // (og dermed venstre/højre, top/bund i grid'et) er bare sortOrder.
 export async function reorderProcesses(ids: string[]) {
+  const engagement = await requireEngagement();
+  const owned = await db.process.count({ where: { id: { in: ids }, engagementId: engagement.id } });
+  if (owned !== ids.length) throw new Error("Ikke fundet.");
+
   await db.$transaction(
     ids.map((id, index) => db.process.update({ where: { id }, data: { sortOrder: index } })),
   );
@@ -63,6 +74,7 @@ export async function reorderProcesses(ids: string[]) {
 // underprocesser har ingen cascade — de løsrives i stedet for at slettes med,
 // så forbedringslogikken ikke mister historik ved en fejl.
 export async function deleteProcess(processId: string) {
+  await assertProcessOwnership(processId);
   const subProcesses = await db.subProcess.findMany({
     where: { processId },
     select: { id: true },
@@ -82,6 +94,7 @@ export async function deleteProcess(processId: string) {
 // brugeren har valgt i "Send interview"-popup'en — ikke nødvendigvis alle
 // underprocesser i e2e-processen, da man kan fravælge nogen der.
 export async function sendInterviewToSubProcesses(processId: string, subProcessIds: string[]) {
+  await assertProcessOwnership(processId);
   const experts = await db.subProcessExpert.findMany({
     where: { subProcessId: { in: subProcessIds }, subProcess: { processId } },
   });
@@ -104,5 +117,6 @@ export async function sendInterviewToSubProcesses(processId: string, subProcessI
   }
 
   revalidatePath(`/processes`);
+  revalidatePath(`/processes/${processId}`);
   return experts.length;
 }

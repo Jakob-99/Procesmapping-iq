@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Logo } from "./Logo";
 import { useBreadcrumb } from "./BreadcrumbContext";
 import { logoutAdmin } from "@/app/admin/login/actions";
+import { updateOwnConsultantProfile } from "@/app/admin/actions";
 
 /*
   Samme opbygning som kundefladens Topbar.tsx: mærke + brødkrumme til
@@ -27,15 +28,19 @@ function Chevron() {
   );
 }
 
-function ProfileMenu({ name, email }: { name: string; email: string }) {
+function ProfileMenu({ name, email, title }: { name: string; email: string; title: string | null }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const initial = name.trim().charAt(0).toUpperCase() || "?";
 
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setEditing(false);
+      }
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -53,9 +58,23 @@ function ProfileMenu({ name, email }: { name: string; email: string }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-52 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
-          <div className="truncate text-[13px] font-medium text-(--color-text)">{name}</div>
-          <div className="truncate text-[11.5px] text-(--color-muted)">{email}</div>
+        <div className="absolute right-0 top-[calc(100%+6px)] z-30 w-56 overflow-hidden rounded-md border border-(--color-line) bg-(--color-surface) py-2.5 px-3 shadow-[0_4px_16px_-4px_rgba(20,16,12,0.18)]">
+          {editing ? (
+            <ProfileEditForm name={name} title={title} onDone={() => setEditing(false)} />
+          ) : (
+            <>
+              <div className="truncate text-[13px] font-medium text-(--color-text)">{name}</div>
+              {title && <div className="truncate text-[11.5px] text-(--color-muted)">{title}</div>}
+              <div className="truncate text-[11.5px] text-(--color-faint)">{email}</div>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="mt-2 border-t border-(--color-line) pt-2 text-[12px] text-(--color-muted) hover:text-(--color-text)"
+              >
+                Rediger navn og titel
+              </button>
+            </>
+          )}
           <form action={logoutAdmin} className="mt-2 border-t border-(--color-line) pt-2">
             <button className="text-[12px] text-(--color-muted) hover:text-(--color-text)">Log ud</button>
           </form>
@@ -65,7 +84,63 @@ function ProfileMenu({ name, email }: { name: string; email: string }) {
   );
 }
 
-export function AdminTopbar({ name, email }: { name: string; email: string }) {
+function ProfileEditForm({
+  name,
+  title,
+  onDone,
+}: {
+  name: string;
+  title: string | null;
+  onDone: () => void;
+}) {
+  const [nameValue, setNameValue] = useState(name);
+  const [titleValue, setTitleValue] = useState(title ?? "");
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    if (!nameValue.trim() || pending) return;
+    startTransition(async () => {
+      await updateOwnConsultantProfile(nameValue, titleValue);
+      onDone();
+    });
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <input
+        value={nameValue}
+        onChange={(e) => setNameValue(e.target.value)}
+        placeholder="Navn"
+        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      />
+      <input
+        value={titleValue}
+        onChange={(e) => setTitleValue(e.target.value)}
+        placeholder="Titel (valgfrit)"
+        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      />
+      <div className="flex gap-2 pt-0.5">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending || !nameValue.trim()}
+          className="rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-2.5 py-1 text-[12px] font-medium text-(--color-clay) transition-colors hover:bg-(--color-clay-line) disabled:opacity-40"
+        >
+          {pending ? "Gemmer…" : "Gem"}
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          className="text-[12px] text-(--color-faint) hover:text-(--color-text)"
+        >
+          Annuller
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function AdminTopbar({ name, email, title }: { name: string; email: string; title: string | null }) {
   const path = usePathname();
   const custom = useBreadcrumb();
   const first = path.split("/").filter(Boolean)[1]; // "/admin/xxx" -> "xxx"
@@ -112,7 +187,7 @@ export function AdminTopbar({ name, email }: { name: string; email: string }) {
       })}
 
       <div className="ml-auto flex items-center">
-        <ProfileMenu name={name} email={email} />
+        <ProfileMenu name={name} email={email} title={title} />
       </div>
     </header>
   );

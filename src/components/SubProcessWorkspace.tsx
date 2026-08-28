@@ -2,15 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { BpmnViewer, type BpmnEditorHandle } from "./BpmnViewer";
+import { BpmnViewer, type BpmnEditorHandle, type ElementClickInfo } from "./BpmnViewer";
 import { InterviewPanel } from "./InterviewPanel";
 import { InsightsPanel } from "./InsightsPanel";
 import { ExpertsPanel } from "./ExpertsPanel";
 import { ValidationPanel } from "./ValidationPanel";
 import { TriggersPanel } from "./TriggersPanel";
 import { AssigneeSelect } from "./AssigneeSelect";
+import { StepDetailsPanel } from "./StepDetailsPanel";
+import { LaneEditor } from "./LaneEditor";
 import { Badge, ClayButton, Empty, type Tone } from "./ui";
-import { saveDiagram } from "@/app/(customer)/processes/[processId]/[subId]/actions";
+import {
+  generateStepsFromInterviewAction,
+  saveDiagram,
+  setLaneOrientation,
+} from "@/app/(customer)/processes/[processId]/[subId]/actions";
 
 /*
   Underprocessens arbejdsflade: tegningen får hele skærmen på et prikket
@@ -32,10 +38,37 @@ type Validation = {
   createdAt: string;
 };
 type ImprovementLogItem = { id: string; content: string; status: string; createdAt: string };
+type StepSystemLink = { id: string; usage: string; systemId: string; systemName: string };
+type StepDataLink = { id: string; direction: string; dataObjectId: string; dataObjectName: string };
+type StepOption = {
+  id: string;
+  name: string;
+  actorRoleId: string | null;
+  actorSystemId: string | null;
+  stepType: string;
+  frequency: string | null;
+  durationMin: number | null;
+  painPoint: string | null;
+  decisionCriteria: string | null;
+  output: string | null;
+  systems: StepSystemLink[];
+  data: StepDataLink[];
+};
+type RoleOption = { id: string; name: string };
+type SystemOption = { id: string; name: string };
+type DataObjectOption = { id: string; name: string };
+type LaneOption = {
+  id: string;
+  isDefault: boolean;
+  actorRoleId: string | null;
+  actorSystemId: string | null;
+  actorName: string | null;
+};
 
 const DOCK_ITEMS = [
   { key: "ansvarlig", label: "Ansvarlig" },
   { key: "haendelser", label: "Start/slut" },
+  { key: "detaljer", label: "Skridtdetaljer" },
   { key: "eksperter", label: "Procesksperter" },
   { key: "keynotes", label: "Keynotes" },
   { key: "validering", label: "Validering" },
@@ -70,6 +103,14 @@ function DockIcon({ dockKey }: { dockKey: DockKey }) {
           <circle cx="6" cy="12" r="2.6" />
           <circle cx="18" cy="12" r="2.6" />
           <path d="M8.6 12h6.8" strokeDasharray="2.5 2.5" />
+        </svg>
+      );
+    case "detaljer":
+      return (
+        <svg {...common}>
+          <circle cx="9" cy="7" r="3" />
+          <path d="M4 20a5 5 0 0 1 10 0" />
+          <path d="M15.5 4.5h4M15.5 8.5h4M15.5 12.5h2.5" />
         </svg>
       );
     case "eksperter":
@@ -112,6 +153,7 @@ export function SubProcessWorkspace({
   statusLabel,
   statusTone,
   bpmnXml,
+  canGenerateFromInterview,
   manualCount,
   totalMin,
   notes,
@@ -124,6 +166,12 @@ export function SubProcessWorkspace({
   startEvents,
   endEvents,
   users,
+  roles,
+  systems,
+  dataObjects,
+  steps,
+  lanes,
+  laneOrientation,
 }: {
   processId: string;
   processName: string;
@@ -136,6 +184,7 @@ export function SubProcessWorkspace({
   statusLabel: string;
   statusTone: Tone;
   bpmnXml: string | null;
+  canGenerateFromInterview: boolean;
   manualCount: number;
   totalMin: number;
   notes: Note[];
@@ -148,14 +197,71 @@ export function SubProcessWorkspace({
   startEvents: string[];
   endEvents: string[];
   users: { id: string; name: string }[];
+  roles: RoleOption[];
+  systems: SystemOption[];
+  dataObjects: DataObjectOption[];
+  steps: StepOption[];
+  lanes: LaneOption[];
+  laneOrientation: "VERTICAL" | "HORIZONTAL";
 }) {
   const [panel, setPanel] = useState<DockKey | null>(null);
+  const [focusStepId, setFocusStepId] = useState<string | null>(null);
+  // Svimlaner redigeres ALDRIG i den faste højre-sidebjælke (samme boks som
+  // Skridtdetaljer m.v.) — kun i en lille flydende boks lige ved den
+  // svimlane man klikkede/bad om at tilføje, jf. brugerens eksplicitte krav.
+  const [lanePopover, setLanePopover] = useState<{ laneId: string; x: number; y: number } | null>(null);
+  const [orientationPending, startOrientationTransition] = useTransition();
+
+  // Finder svimlanens egen skærm-position i det levende bpmn-js-lærred, så
+  // boksen dukker op lige ved siden af den — ikke et fast sted langt væk.
+  function popoverNear(laneId: string): { laneId: string; x: number; y: number } {
+    const el = document.querySelector(`[data-element-id="Lane_${laneId}"]`);
+    const rect = el?.getBoundingClientRect();
+    const x = Math.min((rect?.right ?? 200) + 8, window.innerWidth - 300);
+    const y = Math.max(Math.min(rect?.top ?? 120, window.innerHeight - 220), 72);
+    return { laneId, x, y };
+  }
+
+  function handleElementClick(info: ElementClickInfo) {
+    if (info.kind === "lane") {
+      setPanel(null);
+      setLanePopover(popoverNear(info.laneId));
+      return;
+    }
+    setLanePopover(null);
+    if (info.kind === "unsaved") {
+      // Et hånd-tegnet skridt uden gemt id endnu — gem diagrammet først (det
+      // giver det et rigtigt ProcessStep-id), åbn så Skridtdetaljer, som nu
+      // vil vise det i listen.
+      handleSave();
+      setPanel("detaljer");
+      setFocusStepId(null);
+      return;
+    }
+    setPanel("detaljer");
+    setFocusStepId(info.stepId);
+  }
+
+  function handleAddLaneRequested(nearLaneId: string) {
+    setPanel(null);
+    // Positionen beregnes ud fra den svimlane "+"-ikonet sad på, men boksen
+    // selv åbner i opret-tilstand ("__new__"), ikke redigér-tilstand for den.
+    setLanePopover({ ...popoverNear(nearLaneId), laneId: "__new__" });
+  }
+
+  function toggleOrientation() {
+    const next = laneOrientation === "HORIZONTAL" ? "VERTICAL" : "HORIZONTAL";
+    startOrientationTransition(() => setLaneOrientation(processId, subProcessId, next));
+  }
   const drawerRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
+  const lanePopoverRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<BpmnEditorHandle>(null);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [generating, startGenerateTransition] = useTransition();
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   function handleSave() {
     const nodes = editorRef.current?.getOrderedNodes();
@@ -168,18 +274,35 @@ export function SubProcessWorkspace({
     });
   }
 
+  function handleGenerateFromInterview() {
+    setGenerateError(null);
+    startGenerateTransition(async () => {
+      try {
+        await generateStepsFromInterviewAction(processId, subProcessId);
+      } catch (e) {
+        setGenerateError(e instanceof Error ? e.message : "Kunne ikke generere kortlægningen.");
+      }
+    });
+  }
+
   // Luk panelet med Escape eller ved klik udenfor — det skal føles som et
-  // overlay, ikke en fast del af siden.
+  // overlay, ikke en fast del af siden. Svimlane-popoveren lukkes på samme
+  // måde, men er sin egen boks (lanePopoverRef), uafhængig af drawerRef.
   useEffect(() => {
-    if (!panel) return;
+    if (!panel && !lanePopover) return;
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPanel(null);
+      if (e.key === "Escape") {
+        setPanel(null);
+        setLanePopover(null);
+      }
     }
     function onClick(e: MouseEvent) {
       const target = e.target as Node;
       if (drawerRef.current?.contains(target) || dockRef.current?.contains(target)) return;
+      if (lanePopoverRef.current?.contains(target)) return;
       setPanel(null);
+      setLanePopover(null);
     }
 
     document.addEventListener("keydown", onKey);
@@ -188,7 +311,7 @@ export function SubProcessWorkspace({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onClick);
     };
-  }, [panel]);
+  }, [panel, lanePopover]);
 
   const validationTone: Tone | null =
     validations.length === 0
@@ -200,6 +323,7 @@ export function SubProcessWorkspace({
   const badgeFor: Record<DockKey, number | null> = {
     ansvarlig: null,
     haendelser: startEvents.length + endEvents.length || null,
+    detaljer: steps.filter((s) => s.actorRoleId).length || null,
     eksperter: experts.length || null,
     keynotes: notes.length || null,
     validering: null,
@@ -228,6 +352,17 @@ export function SubProcessWorkspace({
             {totalMin > 0 && <span>~{totalMin} min i alt</span>}
           </div>
         )}
+        {bpmnXml && (
+          <button
+            type="button"
+            onClick={toggleOrientation}
+            disabled={orientationPending}
+            title="Skift svimlanernes retning"
+            className="flex items-center gap-1.5 rounded-md border border-(--color-line) bg-(--color-surface) px-3 py-2 text-[12px] text-(--color-muted) shadow-sm transition-colors hover:border-(--color-clay-line) hover:text-(--color-text) disabled:opacity-40"
+          >
+            {laneOrientation === "HORIZONTAL" ? "Vandrette baner" : "Lodrette baner"}
+          </button>
+        )}
         {bpmnXml && (dirty || saved) && (
           <ClayButton onClick={handleSave} disabled={pending || !dirty} className="!py-2 !text-[12.5px] shadow-sm">
             {saved ? "Gemt ✓" : pending ? "Gemmer…" : "Gem ændringer"}
@@ -246,6 +381,8 @@ export function SubProcessWorkspace({
             editable
             className="h-full"
             onDirty={() => setDirty(true)}
+            onElementClick={handleElementClick}
+            onAddLaneRequested={handleAddLaneRequested}
           />
         ) : (
           <div className="rounded-md border border-(--color-line) bg-(--color-surface) px-6 py-5 shadow-sm">
@@ -256,6 +393,37 @@ export function SubProcessWorkspace({
           </div>
         )}
       </div>
+
+      {/*
+        Broen mellem interviewet og lærredet: så snart interviewet har givet
+        transskription men ingen skridt er tegnet endnu, tilbyder vi at lade
+        agenten udlede dem selv i stedet for at underprocesejeren skal tegne
+        alt fra bunden af hukommelsen. Forsvinder for evigt så snart der er
+        ét skridt — den må aldrig kunne overskrive noget der er tegnet i hånden.
+      */}
+      {canGenerateFromInterview && (
+        <div className="pointer-events-none absolute inset-0 top-16 z-10 flex items-start justify-center pt-10">
+          <div className="pointer-events-auto max-w-sm rounded-lg border border-(--color-clay-line) bg-(--color-surface) p-4 text-center shadow-md">
+            <div className="text-[13px] font-medium text-(--color-text)">
+              Interviewet er klar til at blive kortlagt
+            </div>
+            <p className="mt-1.5 text-[12px] leading-relaxed text-(--color-muted)">
+              Lad agenten udlede skridtene fra transskriptionen i stedet for at
+              tegne dem fra bunden.
+            </p>
+            {generateError && (
+              <p className="mt-2 text-[11.5px] text-(--color-alert)">{generateError}</p>
+            )}
+            <ClayButton
+              onClick={handleGenerateFromInterview}
+              disabled={generating}
+              className="mt-3 !py-2 !text-[12.5px]"
+            >
+              {generating ? "Genererer…" : "Generér kortlægning fra interview"}
+            </ClayButton>
+          </div>
+        </div>
+      )}
 
       {/* Flydende dock — funktionerne der før stod i højrekolonnen */}
       <div
@@ -268,7 +436,10 @@ export function SubProcessWorkspace({
             <button
               key={d.key}
               title={d.label}
-              onClick={() => setPanel((p) => (p === d.key ? null : d.key))}
+              onClick={() => {
+                setLanePopover(null);
+                setPanel((p) => (p === d.key ? null : d.key));
+              }}
               className={`relative flex h-9 w-9 items-center justify-center rounded-md transition-colors ${
                 panel === d.key
                   ? "bg-(--color-clay-wash) text-(--color-clay)"
@@ -293,7 +464,8 @@ export function SubProcessWorkspace({
         })}
       </div>
 
-      {/* Panelet der glider ind fra højre med det valgte indhold */}
+      {/* Panelet der glider ind fra højre med dock-indholdet — svimlaner er
+          ALDRIG herinde, kun Skridtdetaljer og de andre faste funktioner. */}
       {panel && (
         <div
           ref={drawerRef}
@@ -312,6 +484,34 @@ export function SubProcessWorkspace({
             startEvents={startEvents}
             endEvents={endEvents}
             users={users}
+            roles={roles}
+            systems={systems}
+            dataObjects={dataObjects}
+            steps={steps}
+            focusStepId={focusStepId}
+          />
+        </div>
+      )}
+
+      {/* Svimlane-editoren — en lille flydende boks tæt på den svimlane man
+          klikkede (eller bad om at tilføje en ny ud fra), ALDRIG i den faste
+          sidebjælke ovenfor. Åbnes ved klik på en svimlanes header i lærredet
+          eller ved klik på bpmn-js's egne "+"-ikoner ved en valgt svimlane
+          (se onAddLaneRequested/BpmnViewer). */}
+      {lanePopover && (
+        <div
+          ref={lanePopoverRef}
+          style={{ left: lanePopover.x, top: lanePopover.y }}
+          className="absolute z-20 w-[280px] rounded-lg border border-(--color-line) bg-(--color-surface) p-3.5 shadow-lg"
+        >
+          <LaneEditor
+            processId={processId}
+            subProcessId={sp.id}
+            laneId={lanePopover.laneId}
+            lanes={lanes}
+            roles={roles}
+            systems={systems}
+            onDone={() => setLanePopover(null)}
           />
         </div>
       )}
@@ -336,6 +536,11 @@ function DrawerContent({
   startEvents,
   endEvents,
   users,
+  roles,
+  systems,
+  dataObjects,
+  steps,
+  focusStepId,
 }: {
   panel: DockKey;
   processId: string;
@@ -353,8 +558,28 @@ function DrawerContent({
   startEvents: string[];
   endEvents: string[];
   users: { id: string; name: string }[];
+  roles: RoleOption[];
+  systems: SystemOption[];
+  dataObjects: DataObjectOption[];
+  steps: StepOption[];
+  focusStepId: string | null;
 }): ReactNode {
   switch (panel) {
+    case "detaljer":
+      return (
+        <div>
+          <DrawerHeader label="Skridtdetaljer" />
+          <StepDetailsPanel
+            processId={processId}
+            subProcessId={sp.id}
+            steps={steps}
+            roles={roles}
+            systems={systems}
+            dataObjects={dataObjects}
+            focusStepId={focusStepId}
+          />
+        </div>
+      );
     case "haendelser":
       return (
         <div>
@@ -416,6 +641,13 @@ function DrawerContent({
         </div>
       );
     case "indsigter":
-      return <InsightsPanel notes={notes} logs={improvementLogs} />;
+      return (
+        <InsightsPanel
+          processId={processId}
+          subProcessId={sp.id}
+          notes={notes}
+          logs={improvementLogs}
+        />
+      );
   }
 }

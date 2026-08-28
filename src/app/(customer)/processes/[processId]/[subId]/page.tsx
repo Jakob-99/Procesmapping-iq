@@ -30,7 +30,13 @@ export default async function SubProcessPage({
         include: {
           systems: { include: { system: true } },
           data: { include: { dataObject: true } },
+          actorRole: true,
+          actorSystem: true,
         },
+      },
+      lanes: {
+        orderBy: { createdAt: "asc" },
+        include: { actorRole: true, actorSystem: true },
       },
       interviews: {
         include: {
@@ -70,15 +76,49 @@ export default async function SubProcessPage({
   // man selv tegner det første skridt.
   const startEvents = splitEvents(sp.startEvent);
   const endEvents = splitEvents(sp.endEvent);
+  // Den grundlæggende lane skal altid vises først, uanset oprettelses-
+  // rækkefølge (bør allerede være ældst, men sorteres eksplicit for en
+  // sikkerheds skyld — se createSubProcess/ensureLane i actions.ts).
+  const sortedLanes = [...sp.lanes].sort((a, b) =>
+    a.isDefault ? -1 : b.isDefault ? 1 : a.createdAt.getTime() - b.createdAt.getTime(),
+  );
   const bpmnXml = buildBpmnXml({
     subProcessName: sp.name,
     startEvents,
     endEvents,
-    steps: mainSteps,
+    orientation: sp.laneOrientation === "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL",
+    lanes: sortedLanes.map((l) => ({
+      id: l.id,
+      isDefault: l.isDefault,
+      actorName: l.actorRole?.name ?? l.actorSystem?.name ?? null,
+    })),
+    steps: mainSteps.map((s) => ({
+      ...s,
+      actor: s.actorRole?.name ?? s.actorSystem?.name ?? null,
+    })),
+  });
+
+  const roles = await db.businessRole.findMany({
+    where: { engagementId: sp.process.engagement.id },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const systems = await db.systemRef.findMany({
+    where: { engagementId: sp.process.engagement.id },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const dataObjects = await db.dataObject.findMany({
+    where: { engagementId: sp.process.engagement.id },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
   });
 
   const manualCount = sp.steps.filter((s) => s.isManual).length;
   const totalMin = sp.steps.reduce((a, s) => a + (s.durationMin ?? 0), 0);
+  // Vis kun "generér fra interview" mens lærredet er tomt — den må aldrig
+  // kunne overskrive skridt nogen allerede har tegnet i hånden.
+  const canGenerateFromInterview = mainSteps.length === 0 && transcript.length > 0;
 
   return (
     <>
@@ -93,12 +133,48 @@ export default async function SubProcessPage({
       processId={processId}
       processName={sp.process.name}
       sp={{ id: sp.id, name: sp.name, assigneeId: sp.assigneeId, assignee: sp.assignee }}
+      laneOrientation={sp.laneOrientation === "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"}
       users={users}
+      roles={roles}
+      systems={systems}
+      dataObjects={dataObjects}
+      lanes={sortedLanes.map((l) => ({
+        id: l.id,
+        isDefault: l.isDefault,
+        actorRoleId: l.actorRoleId,
+        actorSystemId: l.actorSystemId,
+        actorName: l.actorRole?.name ?? l.actorSystem?.name ?? null,
+      }))}
+      steps={sp.steps.map((s) => ({
+        id: s.id,
+        name: s.name,
+        actorRoleId: s.actorRoleId,
+        actorSystemId: s.actorSystemId,
+        stepType: s.stepType,
+        frequency: s.frequency,
+        durationMin: s.durationMin,
+        painPoint: s.painPoint,
+        decisionCriteria: s.decisionCriteria,
+        output: s.output,
+        systems: s.systems.map((link) => ({
+          id: link.id,
+          usage: link.usage ?? "BOTH",
+          systemId: link.systemId,
+          systemName: link.system.name,
+        })),
+        data: s.data.map((link) => ({
+          id: link.id,
+          direction: link.direction ?? "BOTH",
+          dataObjectId: link.dataObjectId,
+          dataObjectName: link.dataObject.name,
+        })),
+      }))}
       startEvents={startEvents}
       endEvents={endEvents}
       statusLabel={st.label}
       statusTone={st.tone as Tone}
       bpmnXml={bpmnXml}
+      canGenerateFromInterview={canGenerateFromInterview}
       manualCount={manualCount}
       totalMin={totalMin}
       notes={notes}

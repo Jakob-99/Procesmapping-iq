@@ -41,6 +41,7 @@ export async function buildBrainContext(engagementId: string) {
                 include: {
                   systems: { include: { system: true } },
                   data: { include: { dataObject: true } },
+                  actorRole: true,
                 },
               },
               interviews: { include: { notes: true } },
@@ -96,7 +97,7 @@ export async function buildBrainContext(engagementId: string) {
           const sys = st.systems.map((x) => x.system.name).join(", ") || "ingen";
           const dat = st.data.map((x) => x.dataObject.name).join(", ") || "ingen";
           const meta = [
-            st.actorRole && `udføres af ${st.actorRole}`,
+            st.actorRole && `udføres af ${st.actorRole.name}`,
             st.isManual ? "manuel" : "automatiseret",
             st.frequency && `frekvens: ${st.frequency}`,
             st.durationMin && `${st.durationMin} min`,

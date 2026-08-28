@@ -3,9 +3,13 @@
   for begge, kun kanten adskiller dem: tynd for Input kontekst, tyk for
   Output kontekst — ligesom start- og sluthændelsen.
 
-  Paletten (figurudvalget i kanten) skal også kunne sætte dem direkte på
-  lærredet — ikke kun de auto-genererede fra kortlægningen — så de to
-  standard-figurer "Data object"/"Data store" er erstattet med vores egne to.
+  Boksene tegnes UDELUKKENDE ud fra rigtige StepData/StepSystem-koblinger,
+  oprettet via Skridtdetaljer-sidebjælken (se linkStepData/linkStepSystem i
+  [subId]/actions.ts) — aldrig ved at brugeren selv tegner dem på lærredet.
+  Derfor er paletens "Data object reference"/"Data store reference" (som
+  tidligere blev erstattet med vores egne, håndtegnbare varianter) fjernet
+  helt: en hånd-tegnet boks ville se identisk ud men aldrig svare til noget
+  rigtigt link, hvilket kun forvirrer.
 */
 import BaseRenderer from "diagram-js/lib/draw/BaseRenderer";
 import { append as svgAppend, create as svgCreate } from "tiny-svg";
@@ -22,6 +26,7 @@ type El = {
 const INK = "#14100c";
 export const CTX_IN_NAME = "Input kontekst";
 export const CTX_OUT_NAME = "Output kontekst";
+export const SYS_NAME = "Systemer";
 
 // Selve figuren, aldrig dens tekstlabel — labelen deler id-præfiks og navn
 // med sit mål og skal bare vise tekst, ikke endnu et ikon.
@@ -35,6 +40,13 @@ function isCtxIn(el: El) {
 function isCtxOut(el: El) {
   if (isLabel(el)) return false;
   return el.id?.startsWith("CtxOut_") || el.businessObject?.name === CTX_OUT_NAME;
+}
+// Systemer-boksen — ren afspejling af StepSystem-links, aldrig noget brugeren
+// selv tegner (intet palette-entry), derfor kun id-præfiks-match, intet
+// navne-fallback nødvendigt.
+function isSysIcon(el: El) {
+  if (isLabel(el)) return false;
+  return !!el.id?.startsWith("Sys_");
 }
 
 // Klassisk filikon: en side med et foldet hjørne øverst til højre.
@@ -62,6 +74,41 @@ function fileIcon(parent: SVGElement, el: El, weight: "thin" | "thick") {
   return group;
 }
 
+// Systemer-ikon: en afrundet skærm/vindue-kontur med en "titelbjælke" — visuelt
+// tydeligt forskelligt fra kontekst-boksens filikon, samme sort-på-hvid stil.
+function systemIcon(parent: SVGElement, el: El) {
+  const group = svgCreate("g");
+  svgAppend(parent, group);
+
+  const { width: w, height: h } = el;
+  const r = Math.min(w, h) * 0.16;
+  const rect = svgCreate("rect", {
+    x: 0,
+    y: 0,
+    width: w,
+    height: h,
+    rx: r,
+    ry: r,
+    fill: "#ffffff",
+    stroke: INK,
+    strokeWidth: 2,
+  });
+  svgAppend(group, rect);
+
+  const barY = h * 0.34;
+  const bar = svgCreate("line", {
+    x1: 0,
+    y1: barY,
+    x2: w,
+    y2: barY,
+    stroke: INK,
+    strokeWidth: 1.5,
+  });
+  svgAppend(group, bar);
+
+  return group;
+}
+
 export class CtxIconRenderer extends BaseRenderer {
   static $inject = ["eventBus", "bpmnRenderer"];
 
@@ -78,10 +125,11 @@ export class CtxIconRenderer extends BaseRenderer {
   }
 
   canRender(element: El) {
-    return isCtxIn(element) || isCtxOut(element);
+    return isCtxIn(element) || isCtxOut(element) || isSysIcon(element);
   }
 
   drawShape(parentNode: SVGElement, element: El) {
+    if (isSysIcon(element)) return systemIcon(parentNode, element);
     return fileIcon(parentNode, element, isCtxIn(element) ? "thin" : "thick");
   }
 
@@ -91,75 +139,30 @@ export class CtxIconRenderer extends BaseRenderer {
 }
 
 /*
-  Erstatter paletens "Data object reference" og "Data store reference" med
-  vores to figurer. Ikonet i selve panelet er en lille version af den samme
-  boks-med-pil-tegning, så det matcher det man faktisk sætter på lærredet.
+  Fjerner paletens indbyggede "Data object reference"/"Data store reference"
+  helt (i stedet for at erstatte dem med håndtegnbare varianter, som tidligere)
+  — kontekst-bokse må kun opstå via rigtige StepData-links fra
+  Skridtdetaljer-panelet, aldrig ved frihåndstegning på lærredet.
+  getPaletteEntries kan returnere en funktion i stedet for et objekt
+  (diagram-js's Palette kalder den med de allerede-indsamlede entries og
+  bruger dens return) — det er det der lader os SLETTE nøgler andre
+  providers (standard-paletten, højere prioritet, kørt først) allerede har
+  sat, i stedet for blot at undlade at tilføje egne.
 */
-function paletteIconHtml(direction: "in" | "out") {
-  // Samme forhold mellem kant og figur som på selve lærredet (28×40, 1.5/3.5)
-  // — en lille version af den tynde tegning bliver uforholdsmæssigt tyk hvis
-  // kanten ikke skaleres ned med.
-  const w = 14;
-  const h = 20;
-  const strokeW = direction === "in" ? 1.3 : 2.4;
-  const d = fileIconPath(w, h);
-  const pad = strokeW;
-  // Paletens klik-håndtering og layout er bundet til ".entry" — uden den
-  // klasse er ikonet usynligt og ikke-klikbart, selvom det står i DOM'en.
-  // .entry centrerer skrifttype-ikoner via line-height — det virker ikke for
-  // et inline <svg>, som i stedet lander foroven. Tving centrering med flex.
-  return (
-    `<div class="entry" draggable="true" style="display:flex;align-items:center;justify-content:center;line-height:normal;">` +
-    `<svg width="17" height="24" viewBox="${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}" fill="none">` +
-    `<path d="${d}" stroke="#14100c" stroke-width="${strokeW}" stroke-linejoin="round" fill="white"/>` +
-    `</svg>` +
-    `</div>`
-  );
-}
-
-type ElementFactory = { createShape: (attrs: unknown) => El };
-type Create = { start: (event: unknown, shape: El) => void };
-
 export class CtxPaletteProvider {
-  static $inject = ["palette", "create", "elementFactory"];
+  static $inject = ["palette"];
 
-  constructor(palette: { registerProvider: (priority: number, provider: unknown) => void }, create: Create, elementFactory: ElementFactory) {
-    this._create = create;
-    this._elementFactory = elementFactory;
-    // Lavere prioritet end standard-paletten (1000) — vores entries vinder ved samme nøgle.
+  constructor(palette: { registerProvider: (priority: number, provider: unknown) => void }) {
+    // Lavere prioritet end standard-paletten (1000) — vores provider behandles
+    // sidst i reduce'en, så den kan slette entries den allerede har sat.
     palette.registerProvider(500, this);
   }
 
-  private _create: Create;
-  private _elementFactory: ElementFactory;
-
   getPaletteEntries() {
-    const create = this._create;
-    const elementFactory = this._elementFactory;
-
-    const makeAction = (type: string, name: string, direction: "in" | "out") => {
-      const listener = (event: unknown) => {
-        // Fast størrelse — bpmn-js's standardstørrelse for datalager er
-        // større end for dataobjekt, og de to skal se lige store ud.
-        const shape = elementFactory.createShape({ type, width: 28, height: 40 });
-        shape.businessObject.name = name;
-        // Præfikset id holder den i tråd med de auto-genererede fra
-        // kortlægningen — samme CSS- og gem-logik gælder for begge.
-        shape.businessObject.id = shape.id =
-          (direction === "in" ? "CtxIn_" : "CtxOut_") + Math.random().toString(36).slice(2, 10);
-        create.start(event, shape);
-      };
-      return {
-        group: "data-store",
-        html: paletteIconHtml(direction),
-        title: `Opret ${name}`,
-        action: { dragstart: listener, click: listener },
-      };
-    };
-
-    return {
-      "create.data-object": makeAction("bpmn:DataObjectReference", CTX_IN_NAME, "in"),
-      "create.data-store": makeAction("bpmn:DataStoreReference", CTX_OUT_NAME, "out"),
+    return (entries: Record<string, unknown>) => {
+      delete entries["create.data-object"];
+      delete entries["create.data-store"];
+      return entries;
     };
   }
 }

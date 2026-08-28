@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
+import { assertSystemOwnership } from "@/lib/ownership";
 
 export async function createSystem(
   name: string,
@@ -11,9 +12,9 @@ export async function createSystem(
   isMasterData?: boolean,
   notes?: string,
 ) {
-  if (!name.trim()) return;
+  if (!name.trim()) return null;
   const engagement = await requireEngagement();
-  await db.systemRef.create({
+  const system = await db.systemRef.create({
     data: {
       engagementId: engagement.id,
       name: name.trim(),
@@ -24,6 +25,7 @@ export async function createSystem(
     },
   });
   revalidatePath("/landscape");
+  return system;
 }
 
 // AI-parathedsrapportens grundlag pr. system — redigeres fra /landscape/readiness.
@@ -36,6 +38,7 @@ export async function updateSystemReadiness(
     readinessNotes: string;
   },
 ) {
+  await assertSystemOwnership(id);
   await db.systemRef.update({
     where: { id },
     data: {
@@ -50,6 +53,7 @@ export async function updateSystemReadiness(
 }
 
 export async function deleteSystem(id: string) {
+  await assertSystemOwnership(id);
   // DataObject.ownerSystemId har ingen cascade — ryd referencen først.
   await db.dataObject.updateMany({
     where: { ownerSystemId: id },

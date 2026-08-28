@@ -189,14 +189,20 @@ function UserRow({
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<string>(user?.role ?? "EMPLOYEE");
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function submit() {
     if (!name.trim() || !email.trim()) return;
+    setError(null);
     startTransition(async () => {
-      if (user) {
-        await updateUser(user.id, name, email, role);
-      } else if (organizationId) {
-        await createUser(organizationId, name, email, role);
+      const result = user
+        ? await updateUser(user.id, name, email, role)
+        : organizationId
+          ? await createUser(organizationId, name, email, role)
+          : null;
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
       onDone();
     });
@@ -236,6 +242,9 @@ function UserRow({
         Gem
       </ClayButton>
       <OutlineButton onClick={onDone}>Annuller</OutlineButton>
+      {error && (
+        <p className="w-full text-[12px] text-(--color-alert)">{error}</p>
+      )}
     </div>
   );
 }

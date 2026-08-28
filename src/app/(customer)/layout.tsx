@@ -59,6 +59,7 @@ export default async function CustomerLayout({
                 name: u.name,
                 email: u.email,
                 role: u.role,
+                title: u.title,
               }))
             : []
         }
