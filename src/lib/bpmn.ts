@@ -7,14 +7,16 @@
   når mere end én aktør optræder, og dataobjekter hængt på de skridt der rører
   dem.
 
-  Retning (se SubProcess.laneOrientation): som udgangspunkt (VERTICAL) er
-  svimlanerne lodrette kolonner side om side, og forløbet går ned (Y vokser).
-  Vælger brugeren HORIZONTAL, bliver svimlanerne vandrette baner oven på
-  hinanden, og forløbet går til højre (X vokser) i stedet. Al layout-matematik
-  herunder er skrevet i abstrakte "main"/"cross"-akser (main = retningen
+  Svimlanerne er altid lodrette kolonner side om side, med forløbet gående ned
+  (Y vokser) — det er bevidst den eneste retning, ikke et valg brugeren kan
+  ændre, fordi aktørens navn skal stå synligt og vandret øverst i sin kolonne
+  hver gang, hvilket kun sker i den ene retning (en vandret bane ville i
+  stedet rotere navnet ned langs venstre kant). Layout-matematikken er
+  alligevel skrevet i abstrakte "main"/"cross"-akser (main = retningen
   forløbet bevæger sig i, cross = retningen svimlanerne ligger fordelt i) og
-  omregnes til rigtige x/y kun via toXY() — så begge retninger er den samme
-  kode, ikke to parallelle implementeringer der kan løbe fra hinanden.
+  omregnes til rigtige x/y kun via toXY() — en rest fra dengang begge
+  retninger var understøttet, bevaret fordi det holder al positionerings-
+  matematik i denne fil på én form.
 */
 
 type Step = {
@@ -60,11 +62,10 @@ export function buildBpmnXml(opts: {
   startEvents?: string[];
   endEvents?: string[];
   steps: Step[];
-  orientation?: "VERTICAL" | "HORIZONTAL";
   lanes: Lane[];
 }) {
   const { steps } = opts;
-  const HORIZONTAL = opts.orientation === "HORIZONTAL";
+  const HORIZONTAL = false;
 
   // Eneste sted retningen faktisk forgrener koden — alt andet er skrevet i
   // main/cross og går igennem her.
@@ -84,10 +85,11 @@ export function buildBpmnXml(opts: {
     lane: string;
   };
 
-  // Svimlaner — altid mindst den ene fundamentale (isDefault, ingen aktør,
-  // se Lane ovenfor), plus én bane pr. anden aktør (rolle ELLER system) i den
-  // rækkefølge de blev bygget oven på den. Rene ProcessLane-id'er bruges som
-  // nøgle, ikke aktørnavnet — så BpmnViewer kan finde tilbage til den rigtige
+  // Svimlaner — altid mindst den ene fundamentale (isDefault, kan ikke
+  // slettes, men kan sagtens få tildelt en aktør ligesom enhver anden lane),
+  // plus én bane pr. anden aktør (rolle ELLER system) i den rækkefølge de
+  // blev bygget oven på den. Rene ProcessLane-id'er bruges som nøgle, ikke
+  // aktørnavnet — så BpmnViewer kan finde tilbage til den rigtige
   // databaserække ved klik uden tab-behæftet id-oprensning.
   const lanes = opts.lanes;
   const defaultLane = lanes.find((l) => l.isDefault) ?? lanes[0];
@@ -95,7 +97,7 @@ export function buildBpmnXml(opts: {
   const nameToLaneId = new Map(
     lanes.filter((l) => !l.isDefault && l.actorName).map((l) => [l.actorName as string, l.id]),
   );
-  const laneLabel = new Map(lanes.map((l) => [l.id, l.isDefault ? "Proces" : (l.actorName ?? "Proces")]));
+  const laneLabel = new Map(lanes.map((l) => [l.id, l.actorName ?? "Proces"]));
   const laneOf = (s: { actor: string | null }) =>
     (s.actor ? nameToLaneId.get(s.actor) : undefined) ?? defaultLane.id;
   const centerCross = (lane: string, size: number) =>

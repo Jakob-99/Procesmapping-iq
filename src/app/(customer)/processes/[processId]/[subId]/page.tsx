@@ -86,7 +86,6 @@ export default async function SubProcessPage({
     subProcessName: sp.name,
     startEvents,
     endEvents,
-    orientation: sp.laneOrientation === "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL",
     lanes: sortedLanes.map((l) => ({
       id: l.id,
       isDefault: l.isDefault,
@@ -133,7 +132,6 @@ export default async function SubProcessPage({
       processId={processId}
       processName={sp.process.name}
       sp={{ id: sp.id, name: sp.name, assigneeId: sp.assigneeId, assignee: sp.assignee }}
-      laneOrientation={sp.laneOrientation === "HORIZONTAL" ? "HORIZONTAL" : "VERTICAL"}
       users={users}
       roles={roles}
       systems={systems}

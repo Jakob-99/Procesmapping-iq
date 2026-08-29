@@ -144,64 +144,62 @@ export function LaneEditor({
 
   return (
     <div>
-      <h2 className="mb-3 text-[15px] font-semibold tracking-tight">
+      <h2 className="text-[15px] font-semibold tracking-tight">
         {isNew ? "Ny svimlane" : lane?.isDefault ? "Proces (grundlæggende)" : "Svimlane"}
       </h2>
+      <div className="mb-3 mt-1.5 border-t border-(--color-line)" />
 
-      {lane?.isDefault ? (
-        <p className="text-[12.5px] leading-relaxed text-(--color-muted)">
-          Dette er den grundlæggende svimlane — den samler alle skridt uden en
-          tildelt aktør. Den kan ikke slettes eller tildeles en rolle/system.
-          Byg videre på den ved at oprette flere svimlaner med "+ Svimlane" i
-          topbjælken.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div>
-            <div className="eyebrow mb-1">{isNew ? "Rolle eller system" : "Aktør"}</div>
-            {creatingActor ? (
-              <div className="flex gap-1">
-                <input
-                  value={newActorName}
-                  onChange={(e) => setNewActorName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && createActor()}
-                  autoFocus
-                  placeholder={creatingActor === "role" ? "Ny rolle" : "Nyt system"}
-                  className="min-w-0 flex-1 rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
-                />
-                <button
-                  onClick={createActor}
-                  disabled={pending || !newActorName.trim()}
-                  className="shrink-0 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-2.5 text-[11.5px] font-medium text-(--color-clay) disabled:opacity-40"
-                >
-                  Opret
-                </button>
-                <button
-                  onClick={() => {
-                    setCreatingActor(null);
-                    setNewActorName("");
-                  }}
-                  className="shrink-0 text-[11px] text-(--color-faint) hover:text-(--color-text)"
-                >
-                  Annullér
-                </button>
-              </div>
-            ) : (
-              actorSelect
-            )}
-          </div>
-
-          {!isNew && !lane?.isDefault && (
-            <button
-              onClick={remove}
-              disabled={pending}
-              className="text-[11.5px] text-(--color-alert) hover:underline disabled:opacity-40"
-            >
-              Slet svimlane
-            </button>
+      <div className="space-y-3">
+        {lane?.isDefault && (
+          <p className="text-[11.5px] leading-relaxed text-(--color-muted)">
+            Den grundlæggende svimlane kan ikke slettes — men den kan sagtens
+            få tildelt en aktør ligesom enhver anden svimlane.
+          </p>
+        )}
+        <div>
+          <div className="eyebrow mb-1">{isNew ? "Rolle eller system" : "Aktør"}</div>
+          {creatingActor ? (
+            <div className="flex gap-1">
+              <input
+                value={newActorName}
+                onChange={(e) => setNewActorName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createActor()}
+                autoFocus
+                placeholder={creatingActor === "role" ? "Ny rolle" : "Nyt system"}
+                className="min-w-0 flex-1 rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+              />
+              <button
+                onClick={createActor}
+                disabled={pending || !newActorName.trim()}
+                className="shrink-0 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-2.5 text-[11.5px] font-medium text-(--color-clay) disabled:opacity-40"
+              >
+                Opret
+              </button>
+              <button
+                onClick={() => {
+                  setCreatingActor(null);
+                  setNewActorName("");
+                }}
+                className="shrink-0 text-[11px] text-(--color-faint) hover:text-(--color-text)"
+              >
+                Annullér
+              </button>
+            </div>
+          ) : (
+            actorSelect
           )}
         </div>
-      )}
+
+        {!isNew && !lane?.isDefault && (
+          <button
+            onClick={remove}
+            disabled={pending}
+            className="text-[11.5px] text-(--color-alert) hover:underline disabled:opacity-40"
+          >
+            Slet svimlane
+          </button>
+        )}
+      </div>
 
       {error && <p className="mt-2 text-[11.5px] text-(--color-alert)">{error}</p>}
     </div>

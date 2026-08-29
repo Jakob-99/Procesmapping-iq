@@ -247,12 +247,6 @@ model SubProcess {
 
   status String @default("NOT_STARTED") // NOT_STARTED | INTERVIEW | DRAFT | IN_VALIDATION | VALIDATED | NEEDS_UPDATE
 
-  // Svimlanernes retning på lærredet — null/VERTICAL er lodrette kolonner
-  // side om side (forløbet går ned), HORIZONTAL er vandrette baner oven på
-  // hinanden (forløbet går til højre). Rent tegne-valg, ingen datamæssig
-  // betydning — se buildBpmnXml i lib/bpmn.ts.
-  laneOrientation String? // VERTICAL | HORIZONTAL
-
   bpmnXml   String? // BPMN 2.0 som XML — genereret af agenten
   summary   String? // agentens forretningsresumé
   sortOrder Int      @default(0)

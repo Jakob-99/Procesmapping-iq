@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { BpmnViewer, type BpmnEditorHandle, type ElementClickInfo } from "./BpmnViewer";
 import { InterviewPanel } from "./InterviewPanel";
@@ -15,7 +16,6 @@ import { Badge, ClayButton, Empty, type Tone } from "./ui";
 import {
   generateStepsFromInterviewAction,
   saveDiagram,
-  setLaneOrientation,
 } from "@/app/(customer)/processes/[processId]/[subId]/actions";
 
 /*
@@ -171,7 +171,6 @@ export function SubProcessWorkspace({
   dataObjects,
   steps,
   lanes,
-  laneOrientation,
 }: {
   processId: string;
   processName: string;
@@ -202,7 +201,6 @@ export function SubProcessWorkspace({
   dataObjects: DataObjectOption[];
   steps: StepOption[];
   lanes: LaneOption[];
-  laneOrientation: "VERTICAL" | "HORIZONTAL";
 }) {
   const [panel, setPanel] = useState<DockKey | null>(null);
   const [focusStepId, setFocusStepId] = useState<string | null>(null);
@@ -210,7 +208,6 @@ export function SubProcessWorkspace({
   // Skridtdetaljer m.v.) — kun i en lille flydende boks lige ved den
   // svimlane man klikkede/bad om at tilføje, jf. brugerens eksplicitte krav.
   const [lanePopover, setLanePopover] = useState<{ laneId: string; x: number; y: number } | null>(null);
-  const [orientationPending, startOrientationTransition] = useTransition();
 
   // Finder svimlanens egen skærm-position i det levende bpmn-js-lærred, så
   // boksen dukker op lige ved siden af den — ikke et fast sted langt væk.
@@ -249,13 +246,22 @@ export function SubProcessWorkspace({
     setLanePopover({ ...popoverNear(nearLaneId), laneId: "__new__" });
   }
 
-  function toggleOrientation() {
-    const next = laneOrientation === "HORIZONTAL" ? "VERTICAL" : "HORIZONTAL";
-    startOrientationTransition(() => setLaneOrientation(processId, subProcessId, next));
+  // Samme opret-boks som bpmn-js's egne "+"-ikoner ved en svimlane
+  // (handleAddLaneRequested), men fra en synlig knap i topbjælken — så det
+  // ikke kun kan opdages ved først at klikke en svimlane og lede efter et
+  // lille ikon i dens context pad.
+  function handleAddLaneButtonClick() {
+    setPanel(null);
+    const rect = addLaneButtonRef.current?.getBoundingClientRect();
+    const x = Math.min((rect?.left ?? 200), window.innerWidth - 300);
+    const y = Math.max(Math.min((rect?.bottom ?? 120) + 8, window.innerHeight - 220), 72);
+    setLanePopover({ laneId: "__new__", x, y });
   }
+
   const drawerRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
   const lanePopoverRef = useRef<HTMLDivElement>(null);
+  const addLaneButtonRef = useRef<HTMLButtonElement>(null);
   const editorRef = useRef<BpmnEditorHandle>(null);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -263,11 +269,21 @@ export function SubProcessWorkspace({
   const [generating, startGenerateTransition] = useTransition();
   const [generateError, setGenerateError] = useState<string | null>(null);
 
+  const router = useRouter();
+
+  // Hånd-tegnede figurer har kun bpmn-js's eget midlertidige id, indtil
+  // lærredet næste gang genindlæses med den XML gemningen selv udløste (der
+  // matcher dem til deres nye ProcessStep-id via nid(), se lib/bpmn.ts) — men
+  // klikker man Gem igen FØR den genindlæsning er nået frem, ser den samme
+  // figur stadig ud som "ny" og oprettes en gang til. router.refresh()
+  // ventes derfor eksplicit igennem her, så knappen ikke kan trykkes igen
+  // (den er disabled mens pending er true) før tegningen faktisk er i sync.
   function handleSave() {
     const nodes = editorRef.current?.getOrderedNodes();
     if (!nodes) return;
     startTransition(async () => {
       await saveDiagram(processId, subProcessId, nodes);
+      router.refresh();
       setDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -354,13 +370,13 @@ export function SubProcessWorkspace({
         )}
         {bpmnXml && (
           <button
+            ref={addLaneButtonRef}
             type="button"
-            onClick={toggleOrientation}
-            disabled={orientationPending}
-            title="Skift svimlanernes retning"
-            className="flex items-center gap-1.5 rounded-md border border-(--color-line) bg-(--color-surface) px-3 py-2 text-[12px] text-(--color-muted) shadow-sm transition-colors hover:border-(--color-clay-line) hover:text-(--color-text) disabled:opacity-40"
+            onClick={handleAddLaneButtonClick}
+            title="Tilføj en ny svimlane"
+            className="flex items-center gap-1.5 rounded-md border border-(--color-line) bg-(--color-surface) px-3 py-2 text-[12px] text-(--color-muted) shadow-sm transition-colors hover:border-(--color-clay-line) hover:text-(--color-text)"
           >
-            {laneOrientation === "HORIZONTAL" ? "Vandrette baner" : "Lodrette baner"}
+            + Svimlane
           </button>
         )}
         {bpmnXml && (dirty || saved) && (

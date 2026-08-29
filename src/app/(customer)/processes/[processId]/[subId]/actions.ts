@@ -79,21 +79,6 @@ export async function renameSubProcess(processId: string, subProcessId: string, 
   revalidatePath(`/processes/${processId}`);
 }
 
-// Rent tegne-valg for BPMN-lærredet — se buildBpmnXml i lib/bpmn.ts. Ingen
-// datamæssig betydning, kun hvordan svimlanerne vender.
-export async function setLaneOrientation(
-  processId: string,
-  subProcessId: string,
-  orientation: "VERTICAL" | "HORIZONTAL",
-) {
-  await assertSubProcessOwnership(subProcessId);
-  await db.subProcess.update({
-    where: { id: subProcessId },
-    data: { laneOrientation: orientation },
-  });
-  revalidatePath(path(processId, subProcessId));
-}
-
 // Sletter underprocessen og alt der hænger under den (skridt, interviews,
 // validering — cascader via skemaet). Forbedringer der peger på den løsrives
 // i stedet for at slettes med, samme forsigtighed som deleteProcess for hele
@@ -204,13 +189,26 @@ function stepIdFromNodeId(nodeId: string): string | null {
   return m ? m[1] : null;
 }
 
-type DiagramNode = { id: string; name: string; type: "task" | "gateway"; manual: boolean };
+type DiagramNode = {
+  id: string;
+  name: string;
+  type: "task" | "gateway";
+  manual: boolean;
+  laneId: string | null;
+};
 
 /*
   Gemmer et redigeret diagram. Brugeren tegner selv — sletter figurer, tilføjer
-  nye, trækker pile om — og her oversættes den rækkefølge tilbage til rigtige
-  ProcessStep-rækker. Start- og slut-hændelsen rører vi aldrig: de kommer altid
-  fra SubProcess.startEvent/endEvent, uanset hvad der står på figuren i editoren.
+  nye, trækker pile om, trækker en figur hen over en svimlanegrænse — og her
+  oversættes det tilbage til rigtige ProcessStep-rækker. Start- og
+  slut-hændelsen rører vi aldrig: de kommer altid fra
+  SubProcess.startEvent/endEvent, uanset hvad der står på figuren i editoren.
+
+  node.laneId (se BpmnViewer.laneIdOf) er den svimlane figuren nu visuelt
+  sidder i — trækkes den over i en anden svimlane, skal skridtets aktør
+  ALTID følge med, ellers "springer" figuren stille og roligt tilbage til sin
+  gamle lane ved næste gentegning (diagrammet er jo genereret af aktøren, se
+  buildBpmnXml), hvilket er præcis den bug der skulle rettes her.
 */
 export async function saveDiagram(
   processId: string,
@@ -224,13 +222,27 @@ export async function saveDiagram(
   });
   const existingIds = new Set(existing.map((s) => s.id));
   const keptIds = new Set<string>();
+  const lanes = await db.processLane.findMany({ where: { subProcessId } });
+  const laneById = new Map(lanes.map((l) => [l.id, l]));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ops: any[] = [];
+  // Node-index -> systemId, for den efterfølgende StepSystem-sikring — kan
+  // først køres efter transaktionen, da nyoprettede skridt ikke har et id
+  // før db.$transaction(ops) er kørt (se resultat-zip nedenfor).
+  const systemLinksByIndex = new Map<number, string>();
 
   orderedNodes.forEach((node, index) => {
     const matchedId = stepIdFromNodeId(node.id);
     const stepType = node.type === "gateway" ? "DECISION" : "TASK";
+    const lane = node.laneId ? laneById.get(node.laneId) : undefined;
+    // Ukendt/manglende lane (fx en hånd-tegnet figur uden for enhver
+    // svimlanes grænser) rører vi IKKE aktøren for — kun en genkendt lane må
+    // ændre den, ellers nulstilles en gyldig aktør ved et uheld.
+    const actorFields = lane
+      ? { actorRoleId: lane.actorRoleId, actorSystemId: lane.actorSystemId }
+      : {};
+    if (lane?.actorSystemId) systemLinksByIndex.set(index, lane.actorSystemId);
 
     if (matchedId && existingIds.has(matchedId)) {
       keptIds.add(matchedId);
@@ -242,6 +254,7 @@ export async function saveDiagram(
             stepType,
             isManual: node.manual,
             sortOrder: index,
+            ...actorFields,
           },
         }),
       );
@@ -255,6 +268,7 @@ export async function saveDiagram(
             isManual: node.manual,
             lane: 0,
             sortOrder: index,
+            ...actorFields,
           },
         }),
       );
@@ -265,7 +279,26 @@ export async function saveDiagram(
     if (!keptIds.has(id)) ops.push(db.processStep.delete({ where: { id } }));
   }
 
-  await db.$transaction(ops);
+  const results = await db.$transaction(ops);
+
+  // Samme StepSystem-sikring som setStepActor — svimlanens system-tilknytning
+  // skal afspejles som et rigtigt datalink, ikke kun et visuelt navn, uanset
+  // om aktøren blev sat via Aktør-vælgeren eller ved at trække figuren over i
+  // system-svimlanen.
+  if (systemLinksByIndex.size) {
+    await Promise.all(
+      Array.from(systemLinksByIndex, ([index, systemId]) => {
+        const stepId = results[index]?.id as string | undefined;
+        if (!stepId) return Promise.resolve();
+        return db.stepSystem.upsert({
+          where: { stepId_systemId: { stepId, systemId } },
+          update: {},
+          create: { stepId, systemId, usage: "BOTH" },
+        });
+      }),
+    );
+  }
+
   revalidatePath(path(processId, subProcessId));
 }
 
@@ -356,7 +389,10 @@ export async function createLane(
 // Skifter hvilken rolle/system en eksisterende svimlane repræsenterer — alle
 // skridt der pt. sidder i lanen (dvs. har dens NUVÆRENDE aktør) flytter med,
 // via samme setStepActor som Aktør-vælgeren bruger (så StepSystem-linket for
-// et system-skifte oprettes helt ens, uanset hvilken vej man kom).
+// et system-skifte oprettes helt ens, uanset hvilken vej man kom). Gælder
+// også den grundlæggende svimlane — isDefault betyder kun "kan ikke slettes,
+// findes altid", ikke "kan ikke have en aktør" (se deleteLane, som stadig
+// nægter den).
 export async function setLaneActor(
   processId: string,
   subProcessId: string,
@@ -366,7 +402,6 @@ export async function setLaneActor(
   await assertSubProcessOwnership(subProcessId);
   const lane = await db.processLane.findUnique({ where: { id: laneId } });
   if (!lane || lane.subProcessId !== subProcessId) return;
-  if (lane.isDefault) throw new Error("Den grundlæggende svimlane kan ikke tildeles en aktør.");
 
   if (actor.type === "role") await assertRoleOwnership(actor.id);
   else await assertSystemOwnership(actor.id);

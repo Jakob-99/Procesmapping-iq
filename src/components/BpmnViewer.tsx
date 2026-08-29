@@ -12,7 +12,7 @@ import "bpmn-js/dist/assets/bpmn-font/css/bpmn.css";
 import "bpmn-js/dist/assets/bpmn-js.css";
 
 type CanvasModule = { zoom: (a: string | number, b?: string) => void };
-type BusinessObject = { name?: string; $type: string };
+type BusinessObject = { id: string; name?: string; $type: string; flowNodeRef?: { id: string }[] };
 type BpmnElement = {
   id: string;
   type: string;
@@ -35,7 +35,32 @@ export type DiagramNode = {
   name: string;
   type: "task" | "gateway";
   manual: boolean;
+  // Samme "Lane_<ProcessLane.id>"-præfiks-strip som classifyClick — null når
+  // figuren (usandsynligt, men muligt for en hånd-tegnet figur uden for
+  // enhver lane-boks) ikke sidder i nogen kendt svimlane, så serveren ved at
+  // lade dens aktør være urørt i stedet for fejlagtigt at nulstille den.
+  laneId: string | null;
 };
+
+// Diagram-js's element.parent er IKKE til at stole på her — figurer der kom
+// ind via importXML (dvs. alt der ikke lige er trukket i denne session) får
+// "Process_1" som forælder uanset hvilken svimlane de reelt sidder i, selvom
+// XML'en tydeligt lister dem i deres Lanes flowNodeRef (afprøvet direkte i
+// bpmn-js). Den lane et skridt FAKTISK sidder i — både ved almindelig
+// visning og efter et træk hen over en svimlanegrænse — er derfor kun
+// pålidelig via Lane.businessObject.flowNodeRef, den samme liste bpmn-js's
+// egen UpdateFlowNodeRefsBehavior holder opdateret ved et træk.
+function buildLaneOfNodeId(elementRegistry: ElementRegistry): Map<string, string> {
+  const laneOfNodeId = new Map<string, string>();
+  for (const el of elementRegistry.getAll()) {
+    if (el.businessObject?.$type !== "bpmn:Lane") continue;
+    const laneId = el.id.replace(/^Lane_/, "");
+    for (const ref of el.businessObject.flowNodeRef ?? []) {
+      laneOfNodeId.set(ref.id, laneId);
+    }
+  }
+  return laneOfNodeId;
+}
 
 export type BpmnEditorHandle = {
   getOrderedNodes: () => DiagramNode[];
@@ -100,13 +125,14 @@ const FLOW_TYPES = new Set([
   "bpmn:ExclusiveGateway",
 ]);
 
-function toDiagramNode(el: BpmnElement): DiagramNode {
+function toDiagramNode(el: BpmnElement, laneOfNodeId: Map<string, string>): DiagramNode {
   const isGateway = el.businessObject.$type === "bpmn:ExclusiveGateway";
   return {
     id: el.id,
     name: el.businessObject.name ?? "",
     type: isGateway ? "gateway" : "task",
     manual: el.businessObject.$type === "bpmn:ManualTask",
+    laneId: laneOfNodeId.get(el.businessObject.id) ?? null,
   };
 }
 
@@ -117,6 +143,7 @@ function toDiagramNode(el: BpmnElement): DiagramNode {
 function walkOrderedNodes(elementRegistry: ElementRegistry): DiagramNode[] {
   const nodes: DiagramNode[] = [];
   const all = elementRegistry.getAll();
+  const laneOfNodeId = buildLaneOfNodeId(elementRegistry);
   const visited = new Set<string>(all.filter((el) => isLockedId(el.id)).map((el) => el.id));
   let current = all.find((el) => el.businessObject.$type === "bpmn:StartEvent");
 
@@ -124,7 +151,7 @@ function walkOrderedNodes(elementRegistry: ElementRegistry): DiagramNode[] {
     const next: BpmnElement | undefined = current.outgoing?.[0]?.target;
     if (!next || visited.has(next.id) || next.businessObject.$type === "bpmn:EndEvent") break;
     visited.add(next.id);
-    nodes.push(toDiagramNode(next));
+    nodes.push(toDiagramNode(next, laneOfNodeId));
     current = next;
   }
 
@@ -133,7 +160,7 @@ function walkOrderedNodes(elementRegistry: ElementRegistry): DiagramNode[] {
     .filter((el) => FLOW_TYPES.has(el.businessObject.$type) && !visited.has(el.id))
     .sort((a, b) => a.y - b.y);
 
-  for (const el of stray) nodes.push(toDiagramNode(el));
+  for (const el of stray) nodes.push(toDiagramNode(el, laneOfNodeId));
 
   return nodes;
 }
@@ -265,6 +292,12 @@ export const BpmnViewer = forwardRef<BpmnEditorHandle, {
                 if (element.businessObject?.$type !== "bpmn:Lane") return entries;
                 delete entries["lane-divide-two"];
                 delete entries["lane-divide-three"];
+                // Papirkurven ville alligevel altid blive blokeret af
+                // commandStack.shape.delete.canExecute (isLockedId ovenfor) —
+                // svimlaner slettes kun via sidebjælken, aldrig direkte i
+                // tegningen. Vis den ikke, den ville bare være et ikon der
+                // ser ud som en handling men aldrig gør noget.
+                delete entries["delete"];
                 // Samme "Lane_<ProcessLane.id>"-præfiks-strip som classifyClick.
                 const laneId = element.id.replace(/^Lane_/, "");
                 const addLane = { click: () => onAddLaneRequested?.(laneId) };
