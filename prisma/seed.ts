@@ -19,14 +19,25 @@ async function main() {
     update: {},
     create: { email: "jakob@cornerstones.dk", name: "Jakob Breum Møller", role: "ADMIN" },
   });
+  // Jakobs egen mail — så han altid kan logge ind i /admin uden at skulle
+  // huske demo-mailen ovenfor.
+  await db.consultantAccount.upsert({
+    where: { email: "jakob.breum.moller@gmail.com" },
+    update: {},
+    create: { email: "jakob.breum.moller@gmail.com", name: "Jakob Breum Møller", role: "ADMIN" },
+  });
 
   const org = await db.organization.create({
     data: { name: "Nordvest Industri A/S", industry: "Produktion og engros" },
   });
 
-  const [fde, owner1] = await Promise.all(
+  const [fde, , owner1] = await Promise.all(
     [
       { email: "jakob@cornerstones.dk", name: "Jakob Breum Møller", role: "FDE", title: "Senior konsulent" },
+      // Samme mail som konsulent-loginet ovenfor, men et almindeligt
+      // kunde-sæde — så Jakob også kan logge ind på kundefladen med sin
+      // egen mail uden at skulle huske demo-mailen.
+      { email: "jakob.breum.moller@gmail.com", name: "Jakob Breum Møller", role: "FDE", title: "Senior konsulent" },
       { email: "mette@nordvest.dk", name: "Mette Krogh", role: "PROCESS_OWNER", title: "HR-chef" },
     ].map((u) => db.user.create({ data: { ...u, organizationId: org.id } })),
   );
@@ -34,6 +45,19 @@ async function main() {
   const engagement = await db.engagement.create({
     data: { name: "Medarbejderinterviews 2026", organizationId: org.id },
   });
+
+  // Giv begge konsulentkonti adgang til demo-engagementet i /admin —
+  // ConsultantEngagementAccess rammes af organization.deleteMany ovenfor
+  // (cascade via Engagement), så uden dette ville reseed stille og roligt
+  // fjerne adgangen igen, og "Mine kunder" ville se tom ud efter et reseed.
+  const consultantAccounts = await db.consultantAccount.findMany();
+  await Promise.all(
+    consultantAccounts.map((c) =>
+      db.consultantEngagementAccess.create({
+        data: { consultantId: c.id, engagementId: engagement.id },
+      }),
+    ),
+  );
 
   // ------------------------------------------------------------ respondenter
   const [sofie, kasper, louise] = await Promise.all(
