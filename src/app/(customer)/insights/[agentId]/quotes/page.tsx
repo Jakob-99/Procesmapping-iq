@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
@@ -8,12 +9,20 @@ import { QuoteDeleteButton } from "@/components/QuoteDeleteButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function InsightsQuotesPage() {
+export default async function InsightsQuotesPage({
+  params,
+}: {
+  params: Promise<{ agentId: string }>;
+}) {
+  const { agentId } = await params;
   const engagement = await requireEngagement();
 
+  const agent = await db.interviewAgent.findUnique({ where: { id: agentId } });
+  if (!agent || agent.engagementId !== engagement.id) notFound();
+
   const quotes = await db.quote.findMany({
-    where: { engagementId: engagement.id },
-    include: { interview: { include: { respondent: true, interviewAgent: true } } },
+    where: { interview: { interviewAgentId: agentId } },
+    include: { interview: { include: { respondent: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -21,11 +30,11 @@ export default async function InsightsQuotesPage() {
     <div>
       <PageHeader
         title="Indsigter"
-        lead="Tematisk analyse, citater og institutionel hukommelse på tværs af alle interviews."
+        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-agent."
       />
 
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <InsightsTabs />
+        <InsightsTabs agentId={agentId} agentName={agent.name} />
 
         {quotes.length === 0 ? (
           <Empty>
@@ -48,7 +57,7 @@ export default async function InsightsQuotesPage() {
                     href={`/interviews/${q.interviewId}`}
                     className="text-[12px] text-(--color-muted) hover:text-(--color-clay)"
                   >
-                    {q.interview.respondent.name} · {q.interview.interviewAgent.name}
+                    {q.interview.respondent.name}
                   </Link>
                 </div>
               </Panel>

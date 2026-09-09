@@ -7,7 +7,7 @@ import { ClayButton } from "./ui";
 
 type Answer = { answer: string; sources: { interviewId: string; snippet: string }[] };
 
-export function CrossQueryPanel() {
+export function CrossQueryPanel({ agentId }: { agentId: string }) {
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<Answer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export function CrossQueryPanel() {
     setError(null);
     setResult(null);
     startTransition(async () => {
-      const res = await askCrossQuery(question);
+      const res = await askCrossQuery(agentId, question);
       if ("error" in res) setError(res.error);
       else setResult(res);
     });

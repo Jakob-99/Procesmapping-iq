@@ -1,9 +1,11 @@
 /*
-  Tematisk analyse på tværs af ALLE interviews i et engagement — klynger
-  InterviewNote-rækkerne (smertepunkter, workarounds, risici, tavs viden,
-  muligheder) i et lille sæt navngivne temaer. Regenereres fra bunden ved
+  Tematisk analyse på tværs af interviews under ÉN interview-agent (ét
+  interview-formål/-runde) — klynger InterviewNote-rækkerne (smertepunkter,
+  workarounds, risici, tavs viden, muligheder) i et lille sæt navngivne
+  temaer. To forskellige agenter (fx "Medarbejdertrivsel" og
+  "Onboarding-feedback") blandes aldrig sammen. Regenereres fra bunden ved
   hvert klik (ikke additivt), så temalisten altid afspejler den fulde,
-  aktuelle notemængde.
+  aktuelle notemængde for netop den agent.
 */
 
 import { db } from "./db";
@@ -43,55 +45,54 @@ type NoteForAnalysis = {
   id: string;
   category: string;
   content: string;
-  agentName: string;
   respondentName: string;
 };
 
-function buildThemeAnalysisPrompt(notes: NoteForAnalysis[]): string {
-  const list = notes
-    .map((n) => `[${n.id}] (${n.category}, fra "${n.agentName}" / ${n.respondentName}): ${n.content}`)
-    .join("\n");
-  return `Her er alle noter fra interviews i dette engagement:\n\n${list}\n\nKlyng dem i 3-8 temaer på tværs af interviewene. Et tema skal dække flere noter, gerne fra forskellige interviews, ikke bare gengive én enkelt note. Skriv titel og resumé på dansk.`;
+function buildThemeAnalysisPrompt(agentName: string, notes: NoteForAnalysis[]): string {
+  const list = notes.map((n) => `[${n.id}] (${n.category}, ${n.respondentName}): ${n.content}`).join("\n");
+  return `Her er alle noter fra interviews med agenten "${agentName}":\n\n${list}\n\nKlyng dem i 3-8 temaer på tværs af interviewene. Et tema skal dække flere noter, gerne fra forskellige respondenter, ikke bare gengive én enkelt note. Skriv titel og resumé på dansk.`;
 }
 
-export async function generateThemeClusters(engagementId: string): Promise<number> {
+export async function generateThemeClusters(agentId: string): Promise<number> {
   if (!hasApiKey()) {
     throw new Error("Sæt ANTHROPIC_API_KEY for at generere temaer.");
   }
 
+  const agent = await db.interviewAgent.findUniqueOrThrow({ where: { id: agentId } });
+
   const notesRaw = await db.interviewNote.findMany({
-    where: { interview: { engagementId } },
-    include: { interview: { include: { interviewAgent: true, respondent: true } } },
+    where: { interview: { interviewAgentId: agentId } },
+    include: { interview: { include: { respondent: true } } },
     orderBy: { createdAt: "desc" },
     take: 300,
   });
 
   if (notesRaw.length === 0) {
-    throw new Error("Ingen noter at analysere endnu — gennemfør nogle interviews først.");
+    throw new Error("Ingen noter at analysere endnu — gennemfør nogle interviews med denne agent først.");
   }
 
   const notes: NoteForAnalysis[] = notesRaw.map((n) => ({
     id: n.id,
     category: n.category,
     content: n.content,
-    agentName: n.interview.interviewAgent.name,
     respondentName: n.interview.respondent.name,
   }));
 
   const result = await generateJson<ThemeResult>({
     system:
       "Du er en dygtig kvalitativ researcher, der finder mønstre på tværs af mange interviewnoter. Skriv præcist og på dansk.",
-    prompt: buildThemeAnalysisPrompt(notes),
+    prompt: buildThemeAnalysisPrompt(agent.name, notes),
     schema: THEME_SCHEMA as unknown as Record<string, unknown>,
     effort: "high",
   });
 
   await db.$transaction([
-    db.themeCluster.deleteMany({ where: { engagementId } }),
+    db.themeCluster.deleteMany({ where: { interviewAgentId: agentId } }),
     ...result.themes.map((t) =>
       db.themeCluster.create({
         data: {
-          engagementId,
+          engagementId: agent.engagementId,
+          interviewAgentId: agentId,
           title: t.title,
           summary: t.summary,
           noteIds: JSON.stringify(t.noteIds),

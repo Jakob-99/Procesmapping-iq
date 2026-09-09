@@ -191,6 +191,7 @@ model InterviewAgent {
 
   interviews     Interview[]
   quantQuestions QuantQuestion[]
+  themeClusters  ThemeCluster[]
 }
 
 // Et fast, sammenligneligt spørgsmål agenten stiller alle respondenter (i
@@ -260,14 +261,19 @@ model InterviewMessage {
 // Et AI-genereret tema, klynget ud fra InterviewNote på tværs af ALLE
 // interviews i engagementet. Regenereres fra bunden ved hvert klik —
 // ikke additivt, se generateThemeClusters.
+// Temaerne holdes pr. InterviewAgent (ét interview-formål/-runde), ikke pr.
+// engagement — to forskellige interview-runder (fx "Medarbejdertrivsel" og
+// "Onboarding-feedback") skal ikke blandes sammen i samme temaliste.
 model ThemeCluster {
-  id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  title        String
-  summary      String
-  noteIds      String // JSON array af InterviewNote-id'er analysen bygger på
-  createdAt    DateTime   @default(now())
+  id               String         @id @default(cuid())
+  engagementId     String
+  engagement       Engagement     @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  interviewAgentId String
+  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
+  title            String
+  summary          String
+  noteIds          String // JSON array af InterviewNote-id'er analysen bygger på
+  createdAt        DateTime       @default(now())
 }
 
 // Et manuelt udtrukket citat fra en transskription — "quote stitching".
