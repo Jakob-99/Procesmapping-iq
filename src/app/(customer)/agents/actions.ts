@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
-import { assertInterviewAgentOwnership, assertQuantQuestionOwnership } from "@/lib/ownership";
+import {
+  assertInterviewAgentOwnership,
+  assertInterviewRoundOwnership,
+  assertQuantQuestionOwnership,
+} from "@/lib/ownership";
 import { randomUUID } from "crypto";
 
 export async function createAgent(name: string, goal: string) {
@@ -70,14 +74,21 @@ export async function deleteQuantQuestion(id: string) {
 }
 
 // Genererer (eller genbruger) et offentligt join-slug og tænder/slukker det.
-export async function setPublicJoin(agentId: string, enabled: boolean) {
+// Skal have en runde at samle de selv-oprettede interviews i, ligesom en
+// almindelig afsendelse — roundId er derfor krævet når enabled er sandt.
+export async function setPublicJoin(agentId: string, enabled: boolean, roundId?: string) {
   await assertInterviewAgentOwnership(agentId);
+  if (enabled) {
+    if (!roundId) throw new Error("Vælg en runde for det offentlige link.");
+    await assertInterviewRoundOwnership(roundId);
+  }
   const agent = await db.interviewAgent.findUniqueOrThrow({ where: { id: agentId } });
   await db.interviewAgent.update({
     where: { id: agentId },
     data: {
       publicJoinEnabled: enabled,
       publicJoinSlug: agent.publicJoinSlug ?? (enabled ? randomUUID().slice(0, 8) : null),
+      publicJoinRoundId: enabled ? roundId : null,
     },
   });
   revalidatePath(`/agents/${agentId}`);

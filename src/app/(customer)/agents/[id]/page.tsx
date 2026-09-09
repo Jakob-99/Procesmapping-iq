@@ -27,6 +27,11 @@ export default async function AgentDetailPage({
   });
   if (!agent || agent.engagementId !== engagement.id) notFound();
 
+  const rounds = await db.interviewRound.findMany({
+    where: { engagementId: engagement.id },
+    orderBy: { createdAt: "desc" },
+  });
+
   const resultsByQuestion = await Promise.all(
     agent.quantQuestions.map(async (q) => {
       const grouped = await db.quantAnswer.groupBy({
@@ -94,6 +99,8 @@ export default async function AgentDetailPage({
           <PublicJoinToggle
             agentId={agent.id}
             enabled={agent.publicJoinEnabled}
+            roundId={agent.publicJoinRoundId}
+            rounds={rounds}
             joinUrl={joinUrl}
             qrDataUrl={qrDataUrl}
           />

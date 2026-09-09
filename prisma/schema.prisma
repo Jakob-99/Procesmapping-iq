@@ -1,7 +1,9 @@
 // Corner IQ — interview-platform
 // Datamodellen er lille med vilje: en organisation har respondenter (folk man
-// kan interviewe) og interview-agenter (navngivne interview-definitioner).
-// Et interview binder ét sæt af de to sammen og gemmer samtalen + noter.
+// kan interviewe), interview-agenter (navngivne, genbrugelige interview-
+// definitioner) og interview-runder (navngivne samlinger man opretter først
+// og sender ind i). Et interview binder alle tre sammen (agent + respondent +
+// runde) og gemmer samtalen + noter.
 
 generator client {
   provider = "prisma-client-js"
@@ -131,6 +133,7 @@ model Engagement {
 
   respondents      Respondent[]
   interviewAgents  InterviewAgent[]
+  interviewRounds  InterviewRound[]
   interviews       Interview[]
   hitlRequests     HitlRequest[]
   consultantAccess ConsultantEngagementAccess[]
@@ -186,12 +189,33 @@ model InterviewAgent {
 
   // Offentligt selvbetjenings-link (QR/URL) — respondenten opretter sig selv
   // og starter interviewet uden forudgående oprettelse, se joinPublicInterview.
-  publicJoinEnabled Boolean @default(false)
-  publicJoinSlug    String? @unique
+  // Skal pege på en runde, ligesom en almindelig afsendelse — vælges når
+  // linket aktiveres.
+  publicJoinEnabled Boolean         @default(false)
+  publicJoinSlug    String?         @unique
+  publicJoinRoundId String?
+  publicJoinRound   InterviewRound? @relation(fields: [publicJoinRoundId], references: [id], onDelete: SetNull)
 
   interviews     Interview[]
   quantQuestions QuantQuestion[]
-  themeClusters  ThemeCluster[]
+}
+
+// En navngivet "samling" af afsendte interviews — oprettes FØRST, og vælges
+// derefter når man sender interviews ud (sammen med agent + respondenter).
+// Gør det muligt at sende samme agent ud flere gange over tid (fx
+// "Trivsel Q1", "Trivsel Q2") uden at deres indsigter blandes sammen —
+// indsigter (temaer/citater/spørg på tværs) er scoped til runden, ikke
+// agenten.
+model InterviewRound {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  createdAt    DateTime   @default(now())
+
+  interviews          Interview[]
+  themeClusters       ThemeCluster[]
+  publicJoinForAgents InterviewAgent[]
 }
 
 // Et fast, sammenligneligt spørgsmål agenten stiller alle respondenter (i
@@ -233,6 +257,9 @@ model Interview {
   respondentId      String
   respondent        Respondent    @relation(fields: [respondentId], references: [id], onDelete: Cascade)
 
+  interviewRoundId String
+  interviewRound   InterviewRound @relation(fields: [interviewRoundId], references: [id], onDelete: Cascade)
+
   // Hvem i organisationen sendte interviewet — kun til visning, ingen logik.
   sentById String?
   sentBy   User?   @relation("InterviewSentBy", fields: [sentById], references: [id], onDelete: SetNull)
@@ -259,17 +286,16 @@ model InterviewMessage {
 }
 
 // Et AI-genereret tema, klynget ud fra InterviewNote på tværs af ALLE
-// interviews i engagementet. Regenereres fra bunden ved hvert klik —
-// ikke additivt, se generateThemeClusters.
-// Temaerne holdes pr. InterviewAgent (ét interview-formål/-runde), ikke pr.
-// engagement — to forskellige interview-runder (fx "Medarbejdertrivsel" og
-// "Onboarding-feedback") skal ikke blandes sammen i samme temaliste.
+// interviews i én InterviewRound. Regenereres fra bunden ved hvert klik —
+// ikke additivt, se generateThemeClusters. Temaerne holdes pr. runde, ikke
+// pr. engagement eller agent — to forskellige runder (fx "Trivsel Q1" og
+// "Trivsel Q2", begge med samme agent) skal ikke blandes sammen.
 model ThemeCluster {
   id               String         @id @default(cuid())
   engagementId     String
   engagement       Engagement     @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  interviewAgentId String
-  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
+  interviewRoundId String
+  interviewRound   InterviewRound @relation(fields: [interviewRoundId], references: [id], onDelete: Cascade)
   title            String
   summary          String
   noteIds          String // JSON array af InterviewNote-id'er analysen bygger på

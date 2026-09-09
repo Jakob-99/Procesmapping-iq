@@ -1,10 +1,9 @@
 /*
-  "Spørg på tværs" — institutionel hukommelse over ALLE interviews under ÉN
-  interview-agent (ét interview-formål/-runde), ikke hele engagementet — to
-  forskellige interview-runder skal ikke blandes sammen i samme svar.
-  Stateless: bygger kontekst af noter + gemte citater hver gang, ingen
-  chatlog gemmes. Svaret citerer sine kilder, så man kan klikke videre til
-  det interview det kommer fra.
+  "Spørg på tværs" — institutionel hukommelse over ALLE interviews i ÉN
+  interview-runde, ikke hele engagementet eller alle runder — to forskellige
+  runder skal ikke blandes sammen i samme svar. Stateless: bygger kontekst af
+  noter + gemte citater hver gang, ingen chatlog gemmes. Svaret citerer sine
+  kilder, så man kan klikke videre til det interview det kommer fra.
 */
 
 import { db } from "./db";
@@ -38,7 +37,7 @@ export type CrossQueryResult = {
 };
 
 export async function answerCrossQuery(
-  agentId: string,
+  roundId: string,
   question: string,
 ): Promise<CrossQueryResult> {
   if (!hasApiKey()) {
@@ -48,17 +47,17 @@ export async function answerCrossQuery(
     throw new Error("Skriv et spørgsmål.");
   }
 
-  const agent = await db.interviewAgent.findUniqueOrThrow({ where: { id: agentId } });
+  const round = await db.interviewRound.findUniqueOrThrow({ where: { id: roundId } });
 
   const [notes, quotes] = await Promise.all([
     db.interviewNote.findMany({
-      where: { interview: { interviewAgentId: agentId } },
+      where: { interview: { interviewRoundId: roundId } },
       include: { interview: { include: { respondent: true } } },
       orderBy: { createdAt: "desc" },
       take: 300,
     }),
     db.quote.findMany({
-      where: { interview: { interviewAgentId: agentId } },
+      where: { interview: { interviewRoundId: roundId } },
       include: { interview: { include: { respondent: true } } },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -66,7 +65,7 @@ export async function answerCrossQuery(
   ]);
 
   if (notes.length === 0 && quotes.length === 0) {
-    throw new Error("Der er ikke noget at søge i endnu — gennemfør nogle interviews med denne agent først.");
+    throw new Error("Der er ikke noget at søge i endnu — gennemfør nogle interviews i denne runde først.");
   }
 
   const context = [
@@ -79,7 +78,7 @@ export async function answerCrossQuery(
   return generateJson<CrossQueryResult>({
     system:
       "Du svarer på spørgsmål ved kun at bruge den viden der findes i de givne interviewnoter og citater. Svar aldrig ud fra generel viden. Sig det tydeligt hvis konteksten ikke indeholder svaret. Skriv på dansk.",
-    prompt: `--- Noter og citater fra interviews med agenten "${agent.name}" ---\n${context}\n\n--- Spørgsmål ---\n${question}`,
+    prompt: `--- Noter og citater fra interviews i runden "${round.name}" ---\n${context}\n\n--- Spørgsmål ---\n${question}`,
     schema: CROSS_QUERY_SCHEMA as unknown as Record<string, unknown>,
     effort: "medium",
   });

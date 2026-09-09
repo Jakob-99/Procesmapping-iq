@@ -12,16 +12,16 @@ export const dynamic = "force-dynamic";
 export default async function InsightsThemesPage({
   params,
 }: {
-  params: Promise<{ agentId: string }>;
+  params: Promise<{ roundId: string }>;
 }) {
-  const { agentId } = await params;
+  const { roundId } = await params;
   const engagement = await requireEngagement();
 
-  const agent = await db.interviewAgent.findUnique({ where: { id: agentId } });
-  if (!agent || agent.engagementId !== engagement.id) notFound();
+  const round = await db.interviewRound.findUnique({ where: { id: roundId } });
+  if (!round || round.engagementId !== engagement.id) notFound();
 
   const themes = await db.themeCluster.findMany({
-    where: { interviewAgentId: agentId },
+    where: { interviewRoundId: roundId },
     orderBy: { createdAt: "asc" },
   });
 
@@ -38,18 +38,18 @@ export default async function InsightsThemesPage({
     <div>
       <PageHeader
         title="Indsigter"
-        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-agent."
+        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-runde."
       />
 
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <InsightsTabs agentId={agentId} agentName={agent.name} />
+        <InsightsTabs roundId={roundId} roundName={round.name} />
 
         <div className="mb-5 flex items-start justify-between gap-4">
           <p className="max-w-md text-[12.5px] leading-relaxed text-(--color-faint)">
-            AI'en klynger noterne fra alle gennemførte interviews med denne
-            agent i temaer. Regenerér når der er kommet nye interviews i hus.
+            AI'en klynger noterne fra alle gennemførte interviews i denne
+            runde i temaer. Regenerér når der er kommet nye interviews i hus.
           </p>
-          <ThemeGenerateButton agentId={agentId} />
+          <ThemeGenerateButton roundId={roundId} />
         </div>
 
         {themes.length === 0 ? (

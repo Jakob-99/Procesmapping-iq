@@ -6,12 +6,12 @@ import { Panel, Empty } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-// Indsigter er altid scoped til ÉN interview-agent (ét interview-formål),
-// aldrig blandet på tværs af flere — man vælger agenten her først.
-export default async function InsightsAgentPickerPage() {
+// Indsigter er altid scoped til ÉN interview-runde, aldrig blandet på tværs
+// af flere — man vælger runden her først.
+export default async function InsightsRoundPickerPage() {
   const engagement = await requireEngagement();
 
-  const agents = await db.interviewAgent.findMany({
+  const rounds = await db.interviewRound.findMany({
     where: { engagementId: engagement.id },
     include: { _count: { select: { interviews: true } } },
     orderBy: { createdAt: "desc" },
@@ -21,24 +21,21 @@ export default async function InsightsAgentPickerPage() {
     <div>
       <PageHeader
         title="Indsigter"
-        lead="Vælg en interview-agent for at se temaer, citater og spørge på tværs af netop den interview-runde."
+        lead="Vælg en interview runde for at se temaer, citater og spørge på tværs af netop de interviews."
       />
 
       <div className="mx-auto max-w-2xl px-8 py-8">
-        {agents.length === 0 ? (
-          <Empty>Ingen interview agenter endnu.</Empty>
+        {rounds.length === 0 ? (
+          <Empty>Ingen interview runder endnu.</Empty>
         ) : (
           <div className="space-y-3">
-            {agents.map((a) => (
-              <Link key={a.id} href={`/insights/${a.id}`}>
+            {rounds.map((r) => (
+              <Link key={r.id} href={`/insights/${r.id}`}>
                 <Panel className="transition-colors hover:border-(--color-clay-line)">
                   <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-[14px] font-medium">{a.name}</div>
-                      <p className="mt-1 line-clamp-1 text-[12.5px] text-(--color-faint)">{a.goal}</p>
-                    </div>
+                    <div className="text-[14px] font-medium">{r.name}</div>
                     <span className="shrink-0 text-[12px] text-(--color-faint)">
-                      {a._count.interviews} interviews
+                      {r._count.interviews} interviews
                     </span>
                   </div>
                 </Panel>

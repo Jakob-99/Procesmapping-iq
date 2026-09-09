@@ -12,16 +12,16 @@ export const dynamic = "force-dynamic";
 export default async function InsightsQuotesPage({
   params,
 }: {
-  params: Promise<{ agentId: string }>;
+  params: Promise<{ roundId: string }>;
 }) {
-  const { agentId } = await params;
+  const { roundId } = await params;
   const engagement = await requireEngagement();
 
-  const agent = await db.interviewAgent.findUnique({ where: { id: agentId } });
-  if (!agent || agent.engagementId !== engagement.id) notFound();
+  const round = await db.interviewRound.findUnique({ where: { id: roundId } });
+  if (!round || round.engagementId !== engagement.id) notFound();
 
   const quotes = await db.quote.findMany({
-    where: { interview: { interviewAgentId: agentId } },
+    where: { interview: { interviewRoundId: roundId } },
     include: { interview: { include: { respondent: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -30,11 +30,11 @@ export default async function InsightsQuotesPage({
     <div>
       <PageHeader
         title="Indsigter"
-        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-agent."
+        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-runde."
       />
 
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <InsightsTabs agentId={agentId} agentName={agent.name} />
+        <InsightsTabs roundId={roundId} roundName={round.name} />
 
         {quotes.length === 0 ? (
           <Empty>

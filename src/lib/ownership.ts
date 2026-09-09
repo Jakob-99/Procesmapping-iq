@@ -51,3 +51,11 @@ export async function assertQuantQuestionOwnership(quantQuestionId: string) {
   });
   return assertEngagementId(question?.interviewAgent.engagementId);
 }
+
+export async function assertInterviewRoundOwnership(roundId: string) {
+  const round = await db.interviewRound.findUnique({
+    where: { id: roundId },
+    select: { engagementId: true },
+  });
+  return assertEngagementId(round?.engagementId);
+}

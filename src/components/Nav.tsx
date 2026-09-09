@@ -55,6 +55,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M9.5 4a2.5 2.5 0 0 1 5 0v13a2.5 2.5 0 0 1-5 0Z" />
     </Icon>
   ),
+  runder: (
+    <Icon>
+      <rect x="3.5" y="4" width="17" height="6.5" rx="1.5" />
+      <rect x="3.5" y="13.5" width="17" height="6.5" rx="1.5" />
+    </Icon>
+  ),
   interviews: (
     <Icon>
       <path d="M4 5.5h16v11H9.5L5 20v-3.5H4z" />
@@ -85,6 +91,7 @@ const ITEMS = [
   { href: "/", key: "oversigt", label: "Oversigt" },
   { href: "/respondents", key: "respondenter", label: "Respondenter" },
   { href: "/agents", key: "agenter", label: "Interview agenter" },
+  { href: "/rounds", key: "runder", label: "Runder" },
   { href: "/interviews", key: "interviews", label: "Interviews" },
   { href: "/insights", key: "indsigter", label: "Indsigter" },
 ];

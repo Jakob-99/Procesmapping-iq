@@ -15,12 +15,13 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function InterviewsPage() {
   const engagement = await requireEngagement();
 
-  const [agents, respondents, interviews] = await Promise.all([
+  const [agents, respondents, rounds, interviews] = await Promise.all([
     db.interviewAgent.findMany({ where: { engagementId: engagement.id }, orderBy: { name: "asc" } }),
     db.respondent.findMany({ where: { engagementId: engagement.id }, orderBy: { name: "asc" } }),
+    db.interviewRound.findMany({ where: { engagementId: engagement.id }, orderBy: { createdAt: "desc" } }),
     db.interview.findMany({
       where: { engagementId: engagement.id },
-      include: { interviewAgent: true, respondent: true, sentBy: true },
+      include: { interviewAgent: true, respondent: true, sentBy: true, interviewRound: true },
       orderBy: { startedAt: "desc" },
     }),
   ]);
@@ -30,7 +31,7 @@ export default async function InterviewsPage() {
       <PageHeader
         eyebrow={`${interviews.length} interviews`}
         title="Interviews"
-        lead="Send en interview agent til en eller flere respondenter, og følg svarene."
+        lead="Send en interview agent til en eller flere respondenter, ind i en interview runde, og følg svarene."
       />
 
       <div className="p-8">
@@ -47,7 +48,7 @@ export default async function InterviewsPage() {
             for at kunne sende et interview.
           </Empty>
         ) : (
-          <SendInterviewForm agents={agents} respondents={respondents} />
+          <SendInterviewForm agents={agents} respondents={respondents} rounds={rounds} />
         )}
 
         {interviews.length === 0 ? (
@@ -61,6 +62,7 @@ export default async function InterviewsPage() {
                     <div className="text-[14px] font-medium">{iv.interviewAgent.name}</div>
                     <div className="mt-0.5 text-[12.5px] text-(--color-muted)">
                       {iv.respondent.name}
+                      <span className="text-(--color-faint)"> · {iv.interviewRound.name}</span>
                       {iv.sentBy && <span className="text-(--color-faint)"> · sendt af {iv.sentBy.name}</span>}
                     </div>
                   </div>

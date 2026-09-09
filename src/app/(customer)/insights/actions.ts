@@ -4,20 +4,20 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import {
-  assertInterviewAgentOwnership,
   assertInterviewOwnership,
+  assertInterviewRoundOwnership,
   assertQuoteOwnership,
 } from "@/lib/ownership";
 import { generateThemeClusters } from "@/lib/theme-analysis";
 import { answerCrossQuery, type CrossQueryResult } from "@/lib/cross-query";
 
 export async function generateThemes(
-  agentId: string,
+  roundId: string,
 ): Promise<{ error: string } | { count: number }> {
-  await assertInterviewAgentOwnership(agentId);
+  await assertInterviewRoundOwnership(roundId);
   try {
-    const count = await generateThemeClusters(agentId);
-    revalidatePath(`/insights/${agentId}`);
+    const count = await generateThemeClusters(roundId);
+    revalidatePath(`/insights/${roundId}`);
     return { count };
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
@@ -25,12 +25,12 @@ export async function generateThemes(
 }
 
 export async function askCrossQuery(
-  agentId: string,
+  roundId: string,
   question: string,
 ): Promise<{ error: string } | CrossQueryResult> {
-  await assertInterviewAgentOwnership(agentId);
+  await assertInterviewRoundOwnership(roundId);
   try {
-    return await answerCrossQuery(agentId, question);
+    return await answerCrossQuery(roundId, question);
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }

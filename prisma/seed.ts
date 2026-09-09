@@ -94,11 +94,20 @@ async function main() {
     },
   });
 
+  // ------------------------------------------------------------- interview-runder
+  const [onboardingRound, trivselRound] = await Promise.all(
+    [
+      { name: "Onboarding — september 2026" },
+      { name: "Trivsel — Q3 2026" },
+    ].map((r) => db.interviewRound.create({ data: { ...r, engagementId: engagement.id } })),
+  );
+
   // ---------------------------------------------------------------- interviews
   const interview = await db.interview.create({
     data: {
       engagementId: engagement.id,
       interviewAgentId: onboarding.id,
+      interviewRoundId: onboardingRound.id,
       respondentId: sofie.id,
       sentById: fde.id,
       status: "COMPLETED",
@@ -146,6 +155,7 @@ async function main() {
     data: {
       engagementId: engagement.id,
       interviewAgentId: trivsel.id,
+      interviewRoundId: trivselRound.id,
       respondentId: kasper.id,
       sentById: fde.id,
       status: "OPEN",

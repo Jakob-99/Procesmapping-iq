@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function InsightsTabs({ agentId, agentName }: { agentId: string; agentName: string }) {
+export function InsightsTabs({ roundId, roundName }: { roundId: string; roundName: string }) {
   const pathname = usePathname();
   const tabs = [
-    { href: `/insights/${agentId}`, label: "Temaer" },
-    { href: `/insights/${agentId}/quotes`, label: "Citater" },
-    { href: `/insights/${agentId}/ask`, label: "Spørg på tværs" },
+    { href: `/insights/${roundId}`, label: "Temaer" },
+    { href: `/insights/${roundId}/quotes`, label: "Citater" },
+    { href: `/insights/${roundId}/ask`, label: "Spørg på tværs" },
   ];
 
   return (
@@ -17,9 +17,9 @@ export function InsightsTabs({ agentId, agentName }: { agentId: string; agentNam
         href="/insights"
         className="mb-2 inline-block text-[12px] text-(--color-faint) hover:text-(--color-clay)"
       >
-        ← Alle agenter
+        ← Alle runder
       </Link>
-      <div className="eyebrow mb-3 text-(--color-clay)">{agentName}</div>
+      <div className="eyebrow mb-3 text-(--color-clay)">{roundName}</div>
       <div className="flex gap-1 border-b border-(--color-line)">
         {tabs.map((t) => {
           const active = pathname === t.href;

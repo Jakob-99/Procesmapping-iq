@@ -37,6 +37,7 @@ export default async function InterviewDetailPage({
     include: {
       interviewAgent: true,
       respondent: true,
+      interviewRound: true,
       messages: { orderBy: { createdAt: "asc" } },
       notes: { orderBy: { createdAt: "asc" } },
     },
@@ -52,7 +53,7 @@ export default async function InterviewDetailPage({
         ]}
       />
       <PageHeader
-        eyebrow={STATUS_LABEL[interview.status] ?? interview.status}
+        eyebrow={`${STATUS_LABEL[interview.status] ?? interview.status} · ${interview.interviewRound.name}`}
         title={`${interview.interviewAgent.name} — ${interview.respondent.name}`}
         action={<DeleteInterviewButton id={interview.id} />}
       />

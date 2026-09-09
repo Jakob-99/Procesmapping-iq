@@ -90,7 +90,7 @@ export async function joinPublicInterview(
   const agent = await db.interviewAgent.findUnique({
     where: { publicJoinSlug: slug },
   });
-  if (!agent || !agent.publicJoinEnabled) {
+  if (!agent || !agent.publicJoinEnabled || !agent.publicJoinRoundId) {
     return { error: "Linket er ikke længere aktivt." };
   }
   if (!name.trim() || !email.trim()) {
@@ -104,7 +104,12 @@ export async function joinPublicInterview(
   });
 
   const interview = await db.interview.create({
-    data: { engagementId: agent.engagementId, interviewAgentId: agent.id, respondentId: respondent.id },
+    data: {
+      engagementId: agent.engagementId,
+      interviewAgentId: agent.id,
+      interviewRoundId: agent.publicJoinRoundId,
+      respondentId: respondent.id,
+    },
   });
 
   const jar = await cookies();

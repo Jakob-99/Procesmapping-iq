@@ -10,24 +10,24 @@ export const dynamic = "force-dynamic";
 export default async function InsightsAskPage({
   params,
 }: {
-  params: Promise<{ agentId: string }>;
+  params: Promise<{ roundId: string }>;
 }) {
-  const { agentId } = await params;
+  const { roundId } = await params;
   const engagement = await requireEngagement();
 
-  const agent = await db.interviewAgent.findUnique({ where: { id: agentId } });
-  if (!agent || agent.engagementId !== engagement.id) notFound();
+  const round = await db.interviewRound.findUnique({ where: { id: roundId } });
+  if (!round || round.engagementId !== engagement.id) notFound();
 
   return (
     <div>
       <PageHeader
         title="Indsigter"
-        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-agent."
+        lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-runde."
       />
 
       <div className="mx-auto max-w-3xl px-8 py-8">
-        <InsightsTabs agentId={agentId} agentName={agent.name} />
-        <CrossQueryPanel agentId={agentId} />
+        <InsightsTabs roundId={roundId} roundName={round.name} />
+        <CrossQueryPanel roundId={roundId} />
       </div>
     </div>
   );
