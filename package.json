@@ -14,7 +14,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.121.0",
     "@prisma/client": "^6.1.0",
-    "bpmn-js": "^17.11.1",
     "next": "15.1.6",
     "react": "19.0.0",
     "react-dom": "19.0.0",

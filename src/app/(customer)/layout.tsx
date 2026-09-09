@@ -29,18 +29,6 @@ export default async function CustomerLayout({
       })
     : null;
 
-  // Forbedringsforslag skal kunne ses og pinnes/un-pinnes direkte fra menuen,
-  // ikke kun på selve Forbedringer-siden — så man kan holde øje med dem
-  // uanset hvor man er. Skal scopes til egen organisation, ellers ville man
-  // se (og kunne pinne) andre kunders forslag.
-  const proposals = sessionUser
-    ? await db.aiosProposal.findMany({
-        where: { improvement: { engagement: { organizationId: sessionUser.organizationId } } },
-        select: { id: true, name: true, selected: true },
-        orderBy: { name: "asc" },
-      })
-    : [];
-
   if (!sessionUser) {
     // Ingen session — kun /login lander her (alle andre sider redirecter
     // dertil via requireEngagement/requireSessionUser). Fuldskærms, uden
@@ -77,7 +65,6 @@ export default async function CustomerLayout({
                 }))
               : []
           }
-          proposals={proposals}
         />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>

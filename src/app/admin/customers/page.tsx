@@ -13,7 +13,7 @@ export default async function CustomersPage() {
     where: { consultantId: consultant.id },
     include: {
       engagement: {
-        include: { organization: true, _count: { select: { processes: true } } },
+        include: { organization: true, _count: { select: { respondents: true } } },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -38,10 +38,10 @@ export default async function CustomersPage() {
             {access.map((a) => (
               <Link key={a.id} href={`/admin/customers/${a.engagement.id}`}>
                 <Panel className="lift h-full transition-colors hover:border-(--color-clay-line)">
-                  <div className="eyebrow mb-1.5">{a.engagement.stage}</div>
+                  <div className="eyebrow mb-1.5">{a.engagement.name}</div>
                   <div className="text-[15px] font-medium">{a.engagement.organization.name}</div>
                   <div className="mt-1 text-[12px] text-(--color-faint)">
-                    {a.engagement.name} · {a.engagement._count.processes} processer
+                    {a.engagement._count.respondents} respondenter
                   </div>
                 </Panel>
               </Link>

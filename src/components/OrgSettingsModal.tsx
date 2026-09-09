@@ -9,7 +9,7 @@ import {
   updateUser,
   deleteUser,
 } from "@/app/actions/organization";
-import { ROLES, type Role } from "@/lib/domain";
+import { ROLES, type Role } from "@/lib/roles";
 
 type OrgUser = { id: string; name: string; email: string; role: string };
 
@@ -22,10 +22,9 @@ type PageKey = (typeof PAGES)[number]["key"];
 
 /*
   Kontrolpanelet: organisationens navn, og listen af brugere — dem der kan
-  logge ind og bruge systemet. IKKE det samme som respondenter/eksperter
-  (SubProcessExpert), som er dem interviews sendes ud til — en bruger kan
-  vælges som kilde til en ny respondent (se addExpertFromUser), men de to
-  begreber holdes bevidst adskilt i UI'en.
+  logge ind og bruge systemet. IKKE det samme som Respondenter (se
+  /respondents), som er dem interviews sendes ud til — de to begreber holdes
+  bevidst adskilt i UI'en.
   Siderne vælges i en sidemenu, ligesom resten af appens navigation, i stedet
   for at ligge stablet under hinanden i én lang scroll.
 */

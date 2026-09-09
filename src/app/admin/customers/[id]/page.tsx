@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireConsultant } from "@/lib/consultant-session";
 import { openCustomerAsConsultant } from "@/app/admin/actions";
 import { PageHeader } from "@/components/PageHeader";
-import { Panel, Badge, OutlineButton } from "@/components/ui";
+import { Panel, OutlineButton } from "@/components/ui";
 import { UsersSection } from "@/components/OrgSettingsModal";
 import { AccessManager } from "@/components/AccessManager";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
@@ -24,7 +24,7 @@ export default async function CustomerDetailPage({
       engagement: {
         include: {
           organization: { include: { users: { orderBy: { name: "asc" } } } },
-          _count: { select: { processes: true, systems: true } },
+          _count: { select: { respondents: true, interviewAgents: true } },
           consultantAccess: { include: { consultant: true } },
         },
       },
@@ -50,16 +50,12 @@ export default async function CustomerDetailPage({
           { label: organization.name },
         ]}
       />
-      <PageHeader
-        title={organization.name}
-        lead={organization.industry ?? undefined}
-        action={<Badge tone="clay">{engagement.stage}</Badge>}
-      />
+      <PageHeader title={organization.name} lead={organization.industry ?? undefined} />
       <div className="grid gap-4 p-8 sm:grid-cols-3">
         <Panel eyebrow="Engagement" title={engagement.name} className="sm:col-span-3" bodyClass="pt-1">
           <div className="flex gap-6 text-[12.5px] text-(--color-muted)">
-            <span>{engagement._count.processes} processer</span>
-            <span>{engagement._count.systems} systemer</span>
+            <span>{engagement._count.respondents} respondenter</span>
+            <span>{engagement._count.interviewAgents} interview agenter</span>
           </div>
         </Panel>
 

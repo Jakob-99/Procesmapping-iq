@@ -13,9 +13,9 @@ function isDuplicateEmailError(error: unknown) {
 }
 
 // Kontrolpanelet redigerer organisationens navn og hvem der er brugere
-// (dem der kan logge ind og bruge systemet — ikke respondenter/interview-
-// eksperter, se SubProcessExpert) på tværs af hele appen — derfor
-// revalideres roden, ikke en enkelt underside.
+// (dem der kan logge ind og bruge systemet — ikke Respondenter, se
+// /respondents) på tværs af hele appen — derfor revalideres roden, ikke en
+// enkelt underside.
 export async function updateOrganizationName(organizationId: string, name: string) {
   if (!name.trim()) return;
   await db.organization.update({

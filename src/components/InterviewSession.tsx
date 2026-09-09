@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentTurn } from "@/lib/interview";
 import { InterviewForm } from "./InterviewForm";
 import { Badge, type Tone } from "./ui";
-import { NOTE_CATEGORIES } from "@/lib/domain";
+import { NOTE_CATEGORIES } from "@/lib/interview";
 import {
-  startInterview,
   saveInterviewMessage,
   saveInterviewNote,
   completeInterview,
-  submitImprovementLog,
-} from "@/app/(customer)/interviews/actions";
+} from "@/app/(customer)/respond/actions";
 
 const NOTE_TONE: Record<string, Tone> = {
   PAIN: "alert",
@@ -30,22 +28,24 @@ type Turn = {
 
 type MockAgentTurn = AgentTurn & { mock?: boolean };
 
+/*
+  Bruges to steder: et rigtigt, afsendt interview (interviewId sat, gemmer
+  løbende) og konsulentens "prøv agenten selv"-preview (agentId sat i stedet,
+  intet gemmes — preview er sand når interviewId er fraværende).
+*/
 export function InterviewSession({
-  subProcessId,
-  subProcessName,
-  employeeName,
+  interviewId,
+  agentId,
+  agentName,
+  respondentName,
   preview,
-  userId,
 }: {
-  subProcessId: string;
-  subProcessName: string;
-  employeeName: string;
+  interviewId?: string;
+  agentId?: string;
+  agentName: string;
+  respondentName: string;
   preview?: boolean;
-  userId?: string;
 }) {
-  // Rigtigt interview (ikke preview): gemmer beskeder, noter og status i
-  // databasen løbende, så det kan genoptages og bruges til kortlægningen.
-  const interviewIdRef = useRef<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [notes, setNotes] = useState<{ category: string; content: string }[]>([]);
   const [input, setInput] = useState("");
@@ -54,20 +54,7 @@ export function InterviewSession({
   const [done, setDone] = useState(false);
   const [started, setStarted] = useState(false);
   const [mock, setMock] = useState(false);
-  const [wish, setWish] = useState("");
-  const [wishSent, setWishSent] = useState(false);
-  const [wishPending, startWishTransition] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
-
-  function sendWish() {
-    if (!wish.trim()) return;
-    startWishTransition(async () => {
-      await submitImprovementLog(subProcessId, employeeName, wish);
-      setWish("");
-      setWishSent(true);
-      setTimeout(() => setWishSent(false), 3000);
-    });
-  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -81,7 +68,8 @@ export function InterviewSession({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          subProcessId,
+          interviewId,
+          agentId,
           messages: history.map((t) => ({ role: t.role, content: t.content })),
         }),
       });
@@ -98,7 +86,6 @@ export function InterviewSession({
       if (turn.keynote) setNotes((n) => [...n, turn.keynote!]);
       if (turn.done) setDone(true);
 
-      const interviewId = interviewIdRef.current;
       if (interviewId) {
         saveInterviewMessage(interviewId, "agent", turn.say);
         if (turn.keynote) saveInterviewNote(interviewId, turn.keynote.category, turn.keynote.content);
@@ -111,11 +98,8 @@ export function InterviewSession({
     }
   }
 
-  async function start() {
+  function start() {
     setStarted(true);
-    if (userId) {
-      interviewIdRef.current = await startInterview(subProcessId, userId);
-    }
     ask([]);
   }
 
@@ -127,8 +111,8 @@ export function InterviewSession({
     const next: Turn[] = [...history, { role: "user", content: text }];
     setTurns(next);
     setInput("");
-    if (interviewIdRef.current) {
-      saveInterviewMessage(interviewIdRef.current, "user", text);
+    if (interviewId) {
+      saveInterviewMessage(interviewId, "user", text);
     }
     ask(next);
   }
@@ -139,19 +123,18 @@ export function InterviewSession({
         <div className="mb-4 text-[13px] text-(--color-muted)">
           {preview ? (
             <>
-              Sådan her kommer interviewet om <b>{subProcessName}</b> til at
-              forløbe. Du taler som {employeeName} — intet bliver gemt.
+              Sådan her kommer interviewet <b>{agentName}</b> til at forløbe.
+              Intet bliver gemt.
             </>
           ) : (
             <>
-              Agenten stiller spørgsmål om <b>{subProcessName}</b> i cirka 30
-              minutter. Du kan stoppe undervejs og fortsætte senere.
+              Agenten <b>{agentName}</b> stiller nogle spørgsmål. Du kan
+              stoppe undervejs og fortsætte senere.
             </>
           )}
         </div>
         <p className="mb-7 text-[13px] leading-relaxed text-(--color-faint)">
-          Der er ingen forkerte svar. Fortæl hvad du faktisk gør — også det der
-          foregår i et regneark eller over telefonen.
+          Der er ingen forkerte svar. Svar frit og konkret.
         </p>
         <button
           onClick={start}
@@ -175,7 +158,7 @@ export function InterviewSession({
           {turns.map((t, i) => (
             <div key={i} className="rise">
               <div className="eyebrow mb-1.5">
-                {t.role === "agent" ? "Corner IQ" : employeeName}
+                {t.role === "agent" ? agentName : respondentName}
               </div>
               <p
                 className={`whitespace-pre-wrap text-[14px] leading-relaxed ${
@@ -210,8 +193,7 @@ export function InterviewSession({
 
           {done && (
             <div className="border-l-2 border-(--color-ok) pl-3 text-[13px] text-(--color-ok)">
-              Interviewet er færdigt. Processen sendes nu til procesejeren for
-              validering.
+              Interviewet er færdigt. Tak for din tid!
             </div>
           )}
 
@@ -267,35 +249,6 @@ export function InterviewSession({
                 </p>
               </div>
             ))}
-          </div>
-        )}
-
-        {!preview && (
-          <div className="mt-6 border-t border-(--color-line) pt-5">
-            <div className="eyebrow mb-2">Foreslå en forbedring</div>
-            <p className="mb-2.5 text-[12px] leading-relaxed text-(--color-faint)">
-              Har du en idé eller et ønske til hvordan noget kunne gøres bedre?
-              Det bliver synligt sammen med resten af kortlægningen.
-            </p>
-            <textarea
-              value={wish}
-              onChange={(e) => setWish(e.target.value)}
-              placeholder="Fx: Det ville hjælpe hvis…"
-              disabled={wishPending}
-              rows={3}
-              className="w-full resize-none rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-(--color-faint) focus:border-(--color-clay-line)"
-            />
-            <button
-              type="button"
-              onClick={sendWish}
-              disabled={wishPending || !wish.trim()}
-              className="mt-2 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-3 py-1.5 text-[12px] font-medium text-(--color-clay) transition-opacity hover:opacity-80 disabled:opacity-40"
-            >
-              {wishPending ? "Sender…" : "Send"}
-            </button>
-            {wishSent && (
-              <p className="mt-2 text-[11.5px] text-(--color-ok)">Sendt, tak!</p>
-            )}
           </div>
         )}
       </aside>
