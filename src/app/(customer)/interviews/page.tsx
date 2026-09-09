@@ -4,6 +4,8 @@ import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
 import { Empty, Badge, Panel } from "@/components/ui";
 import { SendInterviewForm } from "@/components/SendInterviewForm";
+import { RoundCreator } from "@/components/RoundCreator";
+import { RoundRow } from "@/components/RoundRow";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,11 @@ export default async function InterviewsPage() {
   const [agents, respondents, rounds, interviews] = await Promise.all([
     db.interviewAgent.findMany({ where: { engagementId: engagement.id }, orderBy: { name: "asc" } }),
     db.respondent.findMany({ where: { engagementId: engagement.id }, orderBy: { name: "asc" } }),
-    db.interviewRound.findMany({ where: { engagementId: engagement.id }, orderBy: { createdAt: "desc" } }),
+    db.interviewRound.findMany({
+      where: { engagementId: engagement.id },
+      include: { _count: { select: { interviews: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
     db.interview.findMany({
       where: { engagementId: engagement.id },
       include: { interviewAgent: true, respondent: true, sentBy: true, interviewRound: true },
@@ -31,10 +37,27 @@ export default async function InterviewsPage() {
       <PageHeader
         eyebrow={`${interviews.length} interviews`}
         title="Interviews"
-        lead="Send en interview agent til en eller flere respondenter, ind i en interview runde, og følg svarene."
+        lead="Opret en interview runde, send en agent til respondenter ind i den, og følg svarene."
       />
 
       <div className="p-8">
+        <Panel title="Interview runder" className="mb-6">
+          <p className="mb-4 text-[12.5px] leading-relaxed text-(--color-faint)">
+            Runden samler de interviews du sender ud — opret én før du kan
+            sende. Se indsigter for hver runde for sig under Indsigter.
+          </p>
+          <RoundCreator />
+          {rounds.length === 0 ? (
+            <Empty>Ingen runder endnu — opret én for at kunne sende interviews.</Empty>
+          ) : (
+            <div className="divide-y divide-(--color-line-soft)">
+              {rounds.map((r) => (
+                <RoundRow key={r.id} id={r.id} name={r.name} interviewCount={r._count.interviews} />
+              ))}
+            </div>
+          )}
+        </Panel>
+
         {agents.length === 0 || respondents.length === 0 ? (
           <Empty>
             Opret først en{" "}

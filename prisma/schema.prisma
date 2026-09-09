@@ -175,17 +175,24 @@ model RespondentLoginToken {
 }
 
 // En navngivet, genbrugelig interview-definition — det konsulenten bygger og
-// sender ud. "goal" er hvad interviewet skal afdække, "instructions" er
-// valgfri uddybende retningslinjer til agenten (tone, ting den skal spørge
-// ekstra ind til, osv.).
+// sender ud. Prompten er opdelt i tre felter (formål, prækvalificering,
+// hvad der skal undersøges) i stedet for ét frit felt, plus tre 1-5 skalaer
+// der styrer agentens stil (opfølgende/formel/spørgsmålslængde).
 model InterviewAgent {
   id           String     @id @default(cuid())
   engagementId String
   engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
   name         String
-  goal         String
-  instructions String?
-  createdAt    DateTime   @default(now())
+
+  purpose          String // Hvad er agentens formål
+  prequalification String? // Hvad er prækvalificering — hvem/hvad skal være opfyldt før/under interviewet
+  investigate      String? // Hvad skal agenten undersøge — konkrete emner/spørgsmål at bore i
+
+  followUpLevel        Int @default(3) // 1-5: hvor opfølgende agenten er
+  formalityLevel       Int @default(3) // 1-5: hvor formel tonen er
+  questionLengthLevel  Int @default(3) // 1-5: hvor lange/uddybende spørgsmålene er
+
+  createdAt DateTime @default(now())
 
   // Offentligt selvbetjenings-link (QR/URL) — respondenten opretter sig selv
   // og starter interviewet uden forudgående oprettelse, se joinPublicInterview.

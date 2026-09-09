@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { setPublicJoin } from "@/app/(customer)/agents/actions";
 import { ClayButton, OutlineButton } from "./ui";
@@ -82,11 +81,8 @@ export function PublicJoinToggle({
   if (rounds.length === 0) {
     return (
       <p className="text-[12.5px] text-(--color-faint)">
-        Opret en{" "}
-        <Link href="/rounds" className="text-(--color-clay) hover:underline">
-          interview runde
-        </Link>{" "}
-        først — de selv-oprettede interviews skal samles i én.
+        Opret en interview runde under Interviews først — de selv-oprettede
+        interviews skal samles i én.
       </p>
     );
   }

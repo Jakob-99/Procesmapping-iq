@@ -73,12 +73,16 @@ async function main() {
     data: {
       engagementId: engagement.id,
       name: "Onboarding-feedback",
-      goal:
+      purpose:
         "Afdæk hvordan de første 90 dage har været for en ny medarbejder — hvad fungerede, " +
         "hvad manglede, og hvad ville have gjort starten nemmere.",
-      instructions:
+      prequalification: "Personen skal have været ansat i mindst 60 dage.",
+      investigate:
         "Spørg konkret ind til den første uge, den første måned, og hvornår personen følte sig " +
         "produktiv. Vær nysgerrig på huller i oplæring og materialer der manglede.",
+      followUpLevel: 4,
+      formalityLevel: 2,
+      questionLengthLevel: 2,
     },
   });
 
@@ -86,11 +90,13 @@ async function main() {
     data: {
       engagementId: engagement.id,
       name: "Medarbejdertrivsel",
-      goal:
+      purpose:
         "Forstå hvordan medarbejderen har det med arbejdsmængde, samarbejde med kolleger, og " +
         "balancen mellem arbejde og fritid.",
-      instructions:
-        "Hold en varm og uformel tone. Spørg til konkrete eksempler frem for generelle vurderinger.",
+      investigate: "Hold en varm og uformel tone. Spørg til konkrete eksempler frem for generelle vurderinger.",
+      followUpLevel: 3,
+      formalityLevel: 1,
+      questionLengthLevel: 2,
     },
   });
 

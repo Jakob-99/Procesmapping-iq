@@ -10,29 +10,52 @@ import {
 } from "@/lib/ownership";
 import { randomUUID } from "crypto";
 
-export async function createAgent(name: string, goal: string) {
-  if (!name.trim() || !goal.trim()) return null;
+export type AgentInput = {
+  name: string;
+  purpose: string;
+  prequalification: string;
+  investigate: string;
+  followUpLevel: number;
+  formalityLevel: number;
+  questionLengthLevel: number;
+};
+
+function clampLevel(n: number): number {
+  return Math.min(Math.max(Math.round(n), 1), 5);
+}
+
+export async function createAgent(input: AgentInput) {
+  if (!input.name.trim() || !input.purpose.trim()) return null;
   const engagement = await requireEngagement();
   const agent = await db.interviewAgent.create({
     data: {
       engagementId: engagement.id,
-      name: name.trim(),
-      goal: goal.trim(),
+      name: input.name.trim(),
+      purpose: input.purpose.trim(),
+      prequalification: input.prequalification.trim() || null,
+      investigate: input.investigate.trim() || null,
+      followUpLevel: clampLevel(input.followUpLevel),
+      formalityLevel: clampLevel(input.formalityLevel),
+      questionLengthLevel: clampLevel(input.questionLengthLevel),
     },
   });
   revalidatePath("/agents");
   return agent;
 }
 
-export async function updateAgent(id: string, name: string, goal: string, instructions: string) {
+export async function updateAgent(id: string, input: AgentInput) {
   await assertInterviewAgentOwnership(id);
-  if (!name.trim() || !goal.trim()) return;
+  if (!input.name.trim() || !input.purpose.trim()) return;
   await db.interviewAgent.update({
     where: { id },
     data: {
-      name: name.trim(),
-      goal: goal.trim(),
-      instructions: instructions.trim() || null,
+      name: input.name.trim(),
+      purpose: input.purpose.trim(),
+      prequalification: input.prequalification.trim() || null,
+      investigate: input.investigate.trim() || null,
+      followUpLevel: clampLevel(input.followUpLevel),
+      formalityLevel: clampLevel(input.formalityLevel),
+      questionLengthLevel: clampLevel(input.questionLengthLevel),
     },
   });
   revalidatePath("/agents");

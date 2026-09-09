@@ -2,8 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
-import { Empty, Panel } from "@/components/ui";
-import { AgentCreator } from "@/components/AgentCreator";
+import { Empty, Panel, ClayButton } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +21,14 @@ export default async function AgentsPage() {
         eyebrow={`${agents.length} agenter`}
         title="Interview agenter"
         lead="Navngivne interview-definitioner, klar til at sende ud til en eller flere respondenter."
+        action={
+          <Link href="/agents/new">
+            <ClayButton>+ Ny interview agent</ClayButton>
+          </Link>
+        }
       />
 
       <div className="p-8">
-        <AgentCreator />
         {agents.length === 0 ? (
           <Empty>Ingen interview agenter endnu.</Empty>
         ) : (
@@ -35,7 +38,7 @@ export default async function AgentsPage() {
                 <Panel className="lift h-full transition-colors hover:border-(--color-clay-line)">
                   <div className="text-[15px] font-medium">{a.name}</div>
                   <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-(--color-muted)">
-                    {a.goal}
+                    {a.purpose}
                   </p>
                   <div className="mt-3 text-[11px] text-(--color-faint)">
                     {a._count.interviews} interview{a._count.interviews === 1 ? "" : "s"} sendt

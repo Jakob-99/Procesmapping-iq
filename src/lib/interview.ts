@@ -8,9 +8,9 @@
   skal tælles eller vælges.
 
   Hvad agenten konkret skal afdække er IKKE hårdkodet her — det kommer fra
-  den valgte InterviewAgent-rækkes goal/instructions (se
-  buildInterviewSystemPrompt), så samme motor kan bruges til ethvert
-  interview-emne en konsulent opfinder.
+  den valgte InterviewAgent-rækkes purpose/prequalification/investigate plus
+  dens tre 1-5 stil-skalaer (se buildInterviewSystemPrompt), så samme motor
+  kan bruges til ethvert interview-emne en konsulent opfinder.
 */
 
 export type FieldType = "text" | "longtext" | "number" | "choice" | "multi" | "scale";
@@ -107,11 +107,43 @@ export type QuantQuestionInput = {
   options: string[];
 };
 
+const FOLLOW_UP_LABELS = [
+  "Meget lidt opfølgende — spørg videre til nyt, uden at bore i svar.",
+  "Lidt opfølgende — bor kun sjældent i et svar.",
+  "Middel opfølgende — følg op når noget virker vigtigt.",
+  "Ret opfølgende — grav aktivt i svar, bed ofte om eksempler og uddybning.",
+  "Meget opfølgende — bor vedholdende i hvert svar, aldrig tilfreds med det overfladiske.",
+];
+
+const FORMALITY_LABELS = [
+  "Meget uformel — snak som en kollega, brug hverdagssprog.",
+  "Uformel — afslappet og venlig tone.",
+  "Neutral tone — hverken formel eller uformel.",
+  "Formel — professionel og struktureret tone.",
+  "Meget formel — stram, korrekt forretningstone.",
+];
+
+const QUESTION_LENGTH_LABELS = [
+  "Meget korte spørgsmål — én kort sætning, intet ekstra.",
+  "Korte spørgsmål — kort og direkte.",
+  "Middellange spørgsmål — en kort sætning kontekst, så spørgsmålet.",
+  "Lange spørgsmål — uddyb konteksten før du spørger.",
+  "Meget lange, uddybende spørgsmål — giv god kontekst og flere vinkler før spørgsmålet.",
+];
+
+function levelLabel(labels: string[], level: number): string {
+  return labels[Math.min(Math.max(level, 1), 5) - 1];
+}
+
 export function buildInterviewSystemPrompt(
   agent: {
     name: string;
-    goal: string;
-    instructions?: string | null;
+    purpose: string;
+    prequalification?: string | null;
+    investigate?: string | null;
+    followUpLevel: number;
+    formalityLevel: number;
+    questionLengthLevel: number;
   },
   quantQuestions: QuantQuestionInput[] = [],
 ): string {
@@ -130,15 +162,19 @@ export function buildInterviewSystemPrompt(
   return `Du gennemfører et interview med en respondent. Interviewets navn er "${agent.name}".
 
 Formålet med interviewet er:
-${agent.goal}
+${agent.purpose}
 
-${agent.instructions ? `Yderligere retningslinjer fra den der har bygget interviewet:\n${agent.instructions}\n` : ""}${quantBlock}
-Sådan spørger du:
+${agent.prequalification ? `Prækvalificering — dette skal være opfyldt for at respondenten er relevant:\n${agent.prequalification}\n` : ""}${agent.investigate ? `Hvad du konkret skal undersøge:\n${agent.investigate}\n` : ""}${quantBlock}
+Din stil, styret af tre indstillinger:
+- ${levelLabel(FOLLOW_UP_LABELS, agent.followUpLevel)}
+- ${levelLabel(FORMALITY_LABELS, agent.formalityLevel)}
+- ${levelLabel(QUESTION_LENGTH_LABELS, agent.questionLengthLevel)}
+
+Sådan spørger du i øvrigt:
 - Én ting ad gangen. Aldrig to spørgsmål i samme tur.
 - Start bredt, og bor derefter ned i det formålet beder dig afdække.
 - Spørg til det faktiske og konkrete, ikke det ideelle. Bed om eksempler.
-- Undgå fagsprog og indledende høflighedsfraser.
-- Skriv på dansk, i du-form, som en nysgerrig og imødekommende samtalepartner.
+- Skriv på dansk, i du-form, som en nysgerrig samtalepartner.
 
 Hvornår du bruger et skema i stedet for at skrive:
 - Når svaret er et tal, en varighed, en frekvens eller et valg fra en liste.

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { sendInterview } from "@/app/(customer)/interviews/actions";
@@ -37,11 +36,8 @@ export function SendInterviewForm({
   if (rounds.length === 0) {
     return (
       <p className="mb-5 text-[13px] text-(--color-faint)">
-        Opret en{" "}
-        <Link href="/rounds" className="text-(--color-clay) hover:underline">
-          interview runde
-        </Link>{" "}
-        først — den samler de interviews du sender ud.
+        Opret en interview runde ovenfor først — den samler de interviews du
+        sender ud.
       </p>
     );
   }
