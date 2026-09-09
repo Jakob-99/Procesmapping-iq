@@ -12,7 +12,7 @@ export async function getSessionUser() {
   return db.user.findUnique({ where: { id: uid } });
 }
 
-// Bruges af beskyttede sider uden eget engagement-opslag (fx /hitl) —
+// Bruges af beskyttede sider/actions der ikke selv slår engagementet op —
 // sender til /login hvis ingen session.
 export async function requireSessionUser() {
   const user = await getSessionUser();

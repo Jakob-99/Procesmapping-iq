@@ -66,13 +66,6 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M15.3 15.3 20 20" />
     </Icon>
   ),
-  kontakt: (
-    <Icon>
-      <path d="M4 18v-6a8 8 0 0 1 16 0v6" />
-      <rect x="3" y="14" width="4" height="5.5" rx="1.2" />
-      <rect x="17" y="14" width="4" height="5.5" rx="1.2" />
-    </Icon>
-  ),
   kontrolpanel: (
     <Icon>
       <circle cx="12" cy="12" r="8.5" />
@@ -148,21 +141,6 @@ export function Nav({
               {open && <span className="min-w-0 flex-1 text-left">Kontrolpanel</span>}
             </button>
           )}
-          <Link
-            href="/hitl"
-            title="Kontakt en konsulent"
-            className="flex h-11 items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-[12.5px] text-(--color-muted) transition-colors hover:bg-(--color-sunken) hover:text-(--color-text)"
-          >
-            {ICONS.kontakt}
-            {open && (
-              <span className="min-w-0 flex-1">
-                Kontakt en konsulent
-                <span className="mt-0.5 block text-[10.5px] text-(--color-faint)">
-                  Menneske, ikke agent
-                </span>
-              </span>
-            )}
-          </Link>
         </div>
 
         {organization && (

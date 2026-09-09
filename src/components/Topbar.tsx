@@ -19,7 +19,6 @@ const SECTIONS: Record<string, string> = {
   respondents: "Respondenter",
   agents: "Interview agenter",
   interviews: "Interviews",
-  hitl: "Konsulent",
 };
 
 function Chevron() {

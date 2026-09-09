@@ -9,7 +9,6 @@ const db = new PrismaClient();
 */
 async function main() {
   await db.organization.deleteMany();
-  await db.consultant.deleteMany();
 
   // ConsultantAccount (admin-panelets login) rammes IKKE af deleteMany
   // ovenfor — den er global og skal overleve at kunde-demodata gensås.
@@ -170,19 +169,6 @@ async function main() {
 
   void louise;
   void owner1;
-
-  // -------------------------------------------------------------------- HITL
-  await db.consultant.createMany({
-    data: [
-      {
-        name: "Jakob Breum Møller",
-        bio: "Senior konsulent hos Cornerstones — bygger og tilpasser interview-agenterne på dette forløb.",
-        email: "jakob@cornerstones.dk",
-        phone: "+45 20 12 34 56",
-        sortOrder: 0,
-      },
-    ],
-  });
 
   console.log("Seed færdig.");
 }

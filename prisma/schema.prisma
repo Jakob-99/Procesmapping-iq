@@ -43,7 +43,6 @@ model User {
   consultantAccount   ConsultantAccount? @relation(fields: [consultantAccountId], references: [id], onDelete: SetNull)
 
   loginTokens    LoginToken[]
-  hitlRequests   HitlRequest[]
   sentInterviews Interview[]  @relation("InterviewSentBy")
 
   // Mail er kun unik PR. organisation, ikke globalt — en konsulent kan have
@@ -135,7 +134,6 @@ model Engagement {
   interviewAgents  InterviewAgent[]
   interviewRounds  InterviewRound[]
   interviews       Interview[]
-  hitlRequests     HitlRequest[]
   consultantAccess ConsultantEngagementAccess[]
   themeClusters    ThemeCluster[]
   quotes           Quote[]
@@ -332,34 +330,4 @@ model InterviewNote {
   content     String
   importance  Int       @default(2) // 1-3
   createdAt   DateTime  @default(now())
-}
-
-// ------------------------------------------------------------------------ HITL
-
-// En rigtig konsulent (Cornerstones' eget team, ikke kundens organisation) man
-// kan kontakte og booke et møde med. Global på tværs af engagements — det er
-// samme konsulentstab uanset hvilken kunde man kigger på.
-model Consultant {
-  id         String   @id @default(cuid())
-  name       String
-  bio        String? // et par linjer om hvem personen er
-  email      String?
-  phone      String?
-  bookingUrl String? // link til at booke et møde (fx Outlook/Calendly)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-}
-
-// Kunden kan altid række ud efter en rigtig konsulent.
-model HitlRequest {
-  id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  requesterId  String
-  requester    User       @relation(fields: [requesterId], references: [id], onDelete: Cascade)
-  context      String? // hvor i systemet spørgsmålet kom fra
-  question     String
-  status       String     @default("OPEN") // OPEN | ANSWERED
-  answer       String?
-  createdAt    DateTime   @default(now())
 }
