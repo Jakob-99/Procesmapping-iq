@@ -100,17 +100,39 @@ export const AGENT_TURN_SCHEMA = {
   },
 } as const;
 
-export function buildInterviewSystemPrompt(agent: {
-  name: string;
-  goal: string;
-  instructions?: string | null;
-}): string {
+export type QuantQuestionInput = {
+  id: string;
+  prompt: string;
+  type: "CHOICE" | "SCALE";
+  options: string[];
+};
+
+export function buildInterviewSystemPrompt(
+  agent: {
+    name: string;
+    goal: string;
+    instructions?: string | null;
+  },
+  quantQuestions: QuantQuestionInput[] = [],
+): string {
+  const quantBlock =
+    quantQuestions.length === 0
+      ? ""
+      : `\nFaste spørgsmål der skal stilles ordret, ét ad gangen, et sted i løbet af interviewet (naturligt indpasset, ikke nødvendigvis først):\n${quantQuestions
+          .map(
+            (q) =>
+              `- "${q.prompt}" — brug et skema med PRÆCIS ét felt: id="quant:${q.id}", type="${
+                q.type === "CHOICE" ? "choice" : "scale"
+              }"${q.type === "CHOICE" ? `, options=${JSON.stringify(q.options)}` : ", options=[]"}. Spørg den én gang pr. interview, aldrig igen efter den er besvaret.\n`,
+          )
+          .join("")}`;
+
   return `Du gennemfører et interview med en respondent. Interviewets navn er "${agent.name}".
 
 Formålet med interviewet er:
 ${agent.goal}
 
-${agent.instructions ? `Yderligere retningslinjer fra den der har bygget interviewet:\n${agent.instructions}\n` : ""}
+${agent.instructions ? `Yderligere retningslinjer fra den der har bygget interviewet:\n${agent.instructions}\n` : ""}${quantBlock}
 Sådan spørger du:
 - Én ting ad gangen. Aldrig to spørgsmål i samme tur.
 - Start bredt, og bor derefter ned i det formålet beder dig afdække.

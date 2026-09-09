@@ -35,3 +35,19 @@ export async function assertInterviewOwnership(interviewId: string) {
   });
   return assertEngagementId(interview?.engagementId);
 }
+
+export async function assertQuoteOwnership(quoteId: string) {
+  const quote = await db.quote.findUnique({
+    where: { id: quoteId },
+    select: { engagementId: true },
+  });
+  return assertEngagementId(quote?.engagementId);
+}
+
+export async function assertQuantQuestionOwnership(quantQuestionId: string) {
+  const question = await db.quantQuestion.findUnique({
+    where: { id: quantQuestionId },
+    select: { interviewAgent: { select: { engagementId: true } } },
+  });
+  return assertEngagementId(question?.interviewAgent.engagementId);
+}

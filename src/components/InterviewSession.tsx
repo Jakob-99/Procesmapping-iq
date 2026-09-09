@@ -9,6 +9,7 @@ import {
   saveInterviewMessage,
   saveInterviewNote,
   completeInterview,
+  saveQuantAnswers,
 } from "@/app/(customer)/respond/actions";
 
 const NOTE_TONE: Record<string, Tone> = {
@@ -103,7 +104,11 @@ export function InterviewSession({
     ask([]);
   }
 
-  function reply(text: string, fromFormIndex?: number) {
+  function reply(
+    text: string,
+    fromFormIndex?: number,
+    values?: Record<string, string | string[]>,
+  ) {
     if (!text.trim() || busy) return;
     const history = turns.map((t, i) =>
       i === fromFormIndex ? { ...t, formAnswered: true } : t,
@@ -113,6 +118,19 @@ export function InterviewSession({
     setInput("");
     if (interviewId) {
       saveInterviewMessage(interviewId, "user", text);
+      // Faste kvant-spørgsmål har felt-id'et "quant:<quantQuestionId>" — se
+      // buildInterviewSystemPrompt. Alt andet er frie AI-probes og gemmes kun
+      // som den flade tekst-besked ovenfor.
+      if (values) {
+        const answers = Object.entries(values)
+          .filter(([id]) => id.startsWith("quant:"))
+          .map(([id, v]) => ({
+            quantQuestionId: id.slice("quant:".length),
+            value: Array.isArray(v) ? v.join(", ") : v,
+          }))
+          .filter((a) => a.value);
+        if (answers.length) saveQuantAnswers(interviewId, answers);
+      }
     }
     ask(next);
   }
@@ -173,7 +191,7 @@ export function InterviewSession({
                   title={t.form.title}
                   fields={t.form.fields}
                   disabled={busy}
-                  onSubmit={(summary) => reply(summary, i)}
+                  onSubmit={(summary, values) => reply(summary, i, values)}
                 />
               )}
             </div>

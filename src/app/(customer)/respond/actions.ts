@@ -64,3 +64,55 @@ export async function completeInterview(interviewId: string) {
     data: { status: "COMPLETED", completedAt: new Date() },
   });
 }
+
+export async function saveQuantAnswers(
+  interviewId: string,
+  answers: { quantQuestionId: string; value: string }[],
+) {
+  for (const a of answers) {
+    await db.quantAnswer.upsert({
+      where: { quantQuestionId_interviewId: { quantQuestionId: a.quantQuestionId, interviewId } },
+      update: { value: a.value },
+      create: { quantQuestionId: a.quantQuestionId, interviewId, value: a.value },
+    });
+  }
+}
+
+// Offentligt selvbetjenings-link/QR — ingen session eller engagement krævet.
+// Respondenten opretter sig selv (eller genbruges hvis mailen allerede
+// findes) og logges direkte ind, uden magic-kode, da de lige har tastet
+// mailen ind i samme request.
+export async function joinPublicInterview(
+  slug: string,
+  name: string,
+  email: string,
+): Promise<{ error: string } | never> {
+  const agent = await db.interviewAgent.findUnique({
+    where: { publicJoinSlug: slug },
+  });
+  if (!agent || !agent.publicJoinEnabled) {
+    return { error: "Linket er ikke længere aktivt." };
+  }
+  if (!name.trim() || !email.trim()) {
+    return { error: "Udfyld navn og mail." };
+  }
+
+  const respondent = await db.respondent.upsert({
+    where: { engagementId_email: { engagementId: agent.engagementId, email: email.trim() } },
+    update: {},
+    create: { engagementId: agent.engagementId, name: name.trim(), email: email.trim() },
+  });
+
+  const interview = await db.interview.create({
+    data: { engagementId: agent.engagementId, interviewAgentId: agent.id, respondentId: respondent.id },
+  });
+
+  const jar = await cookies();
+  jar.set(COOKIE, respondent.id, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 14,
+  });
+  redirect(`/respond/session/${interview.id}`);
+}

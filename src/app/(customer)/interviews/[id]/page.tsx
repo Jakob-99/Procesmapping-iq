@@ -7,6 +7,7 @@ import { Badge, Empty } from "@/components/ui";
 import { NOTE_CATEGORIES } from "@/lib/interview";
 import type { Tone } from "@/components/ui";
 import { DeleteInterviewButton } from "@/components/DeleteInterviewButton";
+import { QuoteButton } from "@/components/QuoteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -73,6 +74,7 @@ export default async function InterviewDetailPage({
                 >
                   {m.content}
                 </p>
+                <QuoteButton interviewId={interview.id} messageId={m.id} content={m.content} />
               </div>
             ))
           )}

@@ -21,17 +21,32 @@ export async function POST(req: Request) {
   // Et rigtigt, afsendt interview har et interviewId; konsulentens "prøv
   // agenten selv"-preview har i stedet et rent agentId og gemmer intet.
   const agent = interviewId
-    ? (await db.interview.findUnique({ where: { id: interviewId }, include: { interviewAgent: true } }))
-        ?.interviewAgent
+    ? (
+        await db.interview.findUnique({
+          where: { id: interviewId },
+          include: { interviewAgent: { include: { quantQuestions: { orderBy: { sortOrder: "asc" } } } } },
+        })
+      )?.interviewAgent
     : agentId
-      ? await db.interviewAgent.findUnique({ where: { id: agentId } })
+      ? await db.interviewAgent.findUnique({
+          where: { id: agentId },
+          include: { quantQuestions: { orderBy: { sortOrder: "asc" } } },
+        })
       : null;
 
   if (!agent) {
     return NextResponse.json({ error: "Interview-agenten findes ikke." }, { status: 404 });
   }
 
-  const systemPrompt = buildInterviewSystemPrompt(agent);
+  const systemPrompt = buildInterviewSystemPrompt(
+    agent,
+    agent.quantQuestions.map((q) => ({
+      id: q.id,
+      prompt: q.prompt,
+      type: q.type as "CHOICE" | "SCALE",
+      options: q.options ? (JSON.parse(q.options) as string[]) : [],
+    })),
+  );
 
   const transcript = messages.length
     ? messages

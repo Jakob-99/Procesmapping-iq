@@ -134,6 +134,8 @@ model Engagement {
   interviews       Interview[]
   hitlRequests     HitlRequest[]
   consultantAccess ConsultantEngagementAccess[]
+  themeClusters    ThemeCluster[]
+  quotes           Quote[]
 }
 
 // ------------------------------------------------------------- Interview-platform
@@ -182,7 +184,41 @@ model InterviewAgent {
   instructions String?
   createdAt    DateTime   @default(now())
 
-  interviews Interview[]
+  // Offentligt selvbetjenings-link (QR/URL) — respondenten opretter sig selv
+  // og starter interviewet uden forudgående oprettelse, se joinPublicInterview.
+  publicJoinEnabled Boolean @default(false)
+  publicJoinSlug    String? @unique
+
+  interviews     Interview[]
+  quantQuestions QuantQuestion[]
+}
+
+// Et fast, sammenligneligt spørgsmål agenten stiller alle respondenter (i
+// modsætning til de frie, adaptive AI-probes) — svarene kan aggregeres på
+// tværs af interviews under samme agent.
+model QuantQuestion {
+  id               String         @id @default(cuid())
+  interviewAgentId String
+  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
+  prompt           String
+  type             String // CHOICE | SCALE
+  options          String? // JSON array af muligheder, kun CHOICE
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+
+  answers QuantAnswer[]
+}
+
+model QuantAnswer {
+  id              String        @id @default(cuid())
+  quantQuestionId String
+  quantQuestion   QuantQuestion @relation(fields: [quantQuestionId], references: [id], onDelete: Cascade)
+  interviewId     String
+  interview       Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  value           String // valgt mulighed, eller "1".."5" for scale
+  createdAt       DateTime      @default(now())
+
+  @@unique([quantQuestionId, interviewId])
 }
 
 // Én afsendt samtale: én agent, én respondent.
@@ -204,8 +240,10 @@ model Interview {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
-  messages InterviewMessage[]
-  notes    InterviewNote[]
+  messages     InterviewMessage[]
+  notes        InterviewNote[]
+  quotes       Quote[]
+  quantAnswers QuantAnswer[]
 }
 
 model InterviewMessage {
@@ -215,6 +253,35 @@ model InterviewMessage {
   role        String // agent | user
   content     String
   createdAt   DateTime  @default(now())
+
+  quotes Quote[]
+}
+
+// Et AI-genereret tema, klynget ud fra InterviewNote på tværs af ALLE
+// interviews i engagementet. Regenereres fra bunden ved hvert klik —
+// ikke additivt, se generateThemeClusters.
+model ThemeCluster {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  title        String
+  summary      String
+  noteIds      String // JSON array af InterviewNote-id'er analysen bygger på
+  createdAt    DateTime   @default(now())
+}
+
+// Et manuelt udtrukket citat fra en transskription — "quote stitching".
+model Quote {
+  id           String            @id @default(cuid())
+  engagementId String
+  engagement   Engagement        @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  interviewId  String
+  interview    Interview         @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  messageId    String?
+  message      InterviewMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  text         String
+  tag          String?
+  createdAt    DateTime          @default(now())
 }
 
 // Det agenten fandt værd at huske fra interviewet.

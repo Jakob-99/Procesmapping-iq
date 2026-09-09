@@ -52,3 +52,26 @@ export async function deleteRespondent(id: string) {
   await db.respondent.delete({ where: { id } });
   revalidatePath("/respondents");
 }
+
+export async function importRespondents(
+  rows: { name: string; email: string; title?: string }[],
+): Promise<{ imported: number }> {
+  const engagement = await requireEngagement();
+  const valid = rows.filter((r) => r.name.trim() && r.email.trim());
+  await db.$transaction(
+    valid.map((r) =>
+      db.respondent.upsert({
+        where: { engagementId_email: { engagementId: engagement.id, email: r.email.trim() } },
+        update: { name: r.name.trim(), title: r.title?.trim() || null },
+        create: {
+          engagementId: engagement.id,
+          name: r.name.trim(),
+          email: r.email.trim(),
+          title: r.title?.trim() || null,
+        },
+      }),
+    ),
+  );
+  revalidatePath("/respondents");
+  return { imported: valid.length };
+}

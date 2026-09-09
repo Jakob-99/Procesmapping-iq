@@ -60,6 +60,12 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M4 5.5h16v11H9.5L5 20v-3.5H4z" />
     </Icon>
   ),
+  indsigter: (
+    <Icon>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.3 15.3 20 20" />
+    </Icon>
+  ),
   kontakt: (
     <Icon>
       <path d="M4 18v-6a8 8 0 0 1 16 0v6" />
@@ -80,6 +86,7 @@ const ITEMS = [
   { href: "/respondents", key: "respondenter", label: "Respondenter" },
   { href: "/agents", key: "agenter", label: "Interview agenter" },
   { href: "/interviews", key: "interviews", label: "Interviews" },
+  { href: "/insights", key: "indsigter", label: "Indsigter" },
 ];
 
 type OrgUser = { id: string; name: string; email: string; role: string };
