@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 export function InsightsTabs({ roundId, roundName }: { roundId: string; roundName: string }) {
   const pathname = usePathname();
   const tabs = [
+    { href: `/rounds/${roundId}`, label: "Oversigt" },
     { href: `/insights/${roundId}`, label: "Temaer" },
     { href: `/insights/${roundId}/quotes`, label: "Citater" },
     { href: `/insights/${roundId}/ask`, label: "Spørg på tværs" },
@@ -14,12 +15,6 @@ export function InsightsTabs({ roundId, roundName }: { roundId: string; roundNam
 
   return (
     <div className="mb-6">
-      <Link
-        href={`/rounds/${roundId}`}
-        className="mb-2 inline-block text-[12px] text-(--color-faint) hover:text-(--color-clay)"
-      >
-        ← Tilbage til undersøgelsen
-      </Link>
       <div className="eyebrow mb-3 text-(--color-clay)">{roundName}</div>
       <div className="flex gap-1 border-b border-(--color-line)">
         {tabs.map((t) => {

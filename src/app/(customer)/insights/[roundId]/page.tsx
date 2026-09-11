@@ -41,11 +41,10 @@ export default async function InsightsThemesPage({
         items={[
           { label: "Undersøgelser", href: "/interviews" },
           { label: round.name, href: `/rounds/${roundId}` },
-          { label: "Interviews" },
         ]}
       />
       <PageHeader
-        title="Interviews"
+        title="Indsigter"
         lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-runde."
       />
 

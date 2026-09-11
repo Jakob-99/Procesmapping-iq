@@ -10,7 +10,7 @@ import {
   saveInterviewNote,
   completeInterview,
   saveQuantAnswers,
-} from "@/app/(customer)/respond/actions";
+} from "@/app/(respond)/respond/actions";
 
 const NOTE_TONE: Record<string, Tone> = {
   PAIN: "alert",

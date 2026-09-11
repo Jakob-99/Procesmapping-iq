@@ -1,5 +1,4 @@
 import { headers } from "next/headers";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { db } from "@/lib/db";
@@ -10,6 +9,7 @@ import { Panel, Empty } from "@/components/ui";
 import { SendInterviewForm } from "@/components/SendInterviewForm";
 import { RoundPublicJoin } from "@/components/RoundPublicJoin";
 import { InterviewList } from "@/components/InterviewList";
+import { InsightsTabs } from "@/components/InsightsTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +70,8 @@ export default async function RoundDetailPage({
       />
 
       <div className="p-8">
+        <InsightsTabs roundId={round.id} roundName={round.name} />
+
         <Panel title="Send interview" className="mb-6">
           {agents.length === 0 || respondents.length === 0 ? (
             <Empty>
@@ -88,21 +90,6 @@ export default async function RoundDetailPage({
             denne runde.
           </p>
           <RoundPublicJoin roundId={round.id} agents={agentJoinStates} />
-        </Panel>
-
-        <Panel title="Interviews" className="mb-6">
-          <div className="flex items-center justify-between gap-4">
-            <p className="max-w-md text-[12.5px] leading-relaxed text-(--color-faint)">
-              Temaer, citater, spørg-på-tværs og rå data på tværs af alle
-              interviews i denne undersøgelse.
-            </p>
-            <Link
-              href={`/insights/${round.id}`}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-(--color-line) bg-(--color-surface) px-3 py-1.5 text-[12.5px] font-medium text-(--color-muted) transition-colors hover:border-(--color-clay-line) hover:text-(--color-text)"
-            >
-              Åbn
-            </Link>
-          </div>
         </Panel>
 
         <div className="eyebrow mb-3">Sendte interviews</div>

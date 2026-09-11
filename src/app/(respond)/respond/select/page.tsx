@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { getRespondent } from "@/lib/respondent-session";
 import { PageHeader } from "@/components/PageHeader";
 import { Empty, Panel } from "@/components/ui";
-import { logoutRespondent } from "@/app/(customer)/respond/actions";
+import { logoutRespondent } from "@/app/(respond)/respond/actions";
 
 export const dynamic = "force-dynamic";
 

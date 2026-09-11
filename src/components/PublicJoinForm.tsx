@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { joinPublicInterview } from "@/app/(customer)/respond/actions";
+import { joinPublicInterview } from "@/app/(respond)/respond/actions";
 import { ClayButton } from "./ui";
 
 export function PublicJoinForm({ slug }: { slug: string }) {
