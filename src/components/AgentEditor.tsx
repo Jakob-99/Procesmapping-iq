@@ -44,6 +44,7 @@ export function AgentEditor({
   const [questionLengthLevel, setQuestionLengthLevel] = useState(agent?.questionLengthLevel ?? 3);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const router = useRouter();
 
   // "/" i "Hvad skal agenten undersøge" åbner en lille billedvælger, så man
@@ -104,7 +105,6 @@ export function AgentEditor({
 
   function remove() {
     if (!agent) return;
-    if (!confirm(`Slet interview agenten "${agent.name}"? Alle tilknyttede interviews slettes med.`)) return;
     startTransition(async () => {
       await deleteAgent(agent.id);
       router.push("/agents");
@@ -146,12 +146,30 @@ export function AgentEditor({
             {pending ? "Gemmer…" : isNew ? "Opret agent" : "Gem"}
           </ClayButton>
           {!isNew && (
-            <button
-              onClick={remove}
-              className="text-[12px] text-(--color-faint) hover:text-(--color-alert)"
-            >
-              Slet agent
-            </button>
+            confirmingDelete ? (
+              <>
+                <span className="text-[12px] text-(--color-alert)">Sikker?</span>
+                <button
+                  onClick={remove}
+                  className="text-[12px] font-medium text-(--color-alert) hover:opacity-70"
+                >
+                  Ja, slet
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  className="text-[12px] text-(--color-faint) hover:text-(--color-text)"
+                >
+                  Annullér
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="text-[12px] text-(--color-faint) hover:text-(--color-alert)"
+              >
+                Slet agent
+              </button>
+            )
           )}
         </div>
       </header>

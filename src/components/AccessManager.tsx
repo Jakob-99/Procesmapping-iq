@@ -19,6 +19,7 @@ export function AccessManager({
 }) {
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState(withoutAccess[0]?.id ?? "");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   return (
@@ -40,18 +41,38 @@ export function AccessManager({
               <div className="truncate text-[11px] text-(--color-faint)">{c.email}</div>
             </div>
             {c.id !== currentId && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  if (confirm(`Fjern ${c.name}s adgang til denne kunde?`)) {
-                    startTransition(() => revokeAccess(engagementId, c.id));
-                  }
-                }}
-                className="shrink-0 rounded-md px-2 py-1.5 text-[12px] text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
-              >
-                Fjern
-              </button>
+              confirmingId === c.id ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[11.5px] text-(--color-alert)">Sikker?</span>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      setConfirmingId(null);
+                      startTransition(() => revokeAccess(engagementId, c.id));
+                    }}
+                    className="rounded-md px-2 py-1.5 text-[12px] font-medium text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
+                  >
+                    Ja, fjern
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(null)}
+                    className="rounded-md px-2 py-1.5 text-[12px] text-(--color-muted) transition-opacity hover:opacity-70"
+                  >
+                    Annuller
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setConfirmingId(c.id)}
+                  className="shrink-0 rounded-md px-2 py-1.5 text-[12px] text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
+                >
+                  Fjern
+                </button>
+              )
             )}
           </div>
         ))}

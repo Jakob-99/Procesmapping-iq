@@ -152,6 +152,7 @@ export function UsersSection({
 
 function UserDisplayRow({ user, onEdit }: { user: OrgUser; onEdit: () => void }) {
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
   const roleLabel = ROLES[user.role as Role] ?? user.role;
 
   return (
@@ -163,19 +164,41 @@ function UserDisplayRow({ user, onEdit }: { user: OrgUser; onEdit: () => void })
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <OutlineButton onClick={onEdit}>Rediger</OutlineButton>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            if (confirm(`Fjern ${user.name} som bruger?`)) {
-              startTransition(() => deleteUser(user.id));
-            }
-          }}
-          className="rounded-md px-2 py-1.5 text-[12px] text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
-        >
-          Fjern
-        </button>
+        {confirming ? (
+          <>
+            <span className="text-[11.5px] text-(--color-alert)">Sikker?</span>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setConfirming(false);
+                startTransition(() => deleteUser(user.id));
+              }}
+              className="rounded-md px-2 py-1.5 text-[12px] font-medium text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
+            >
+              Ja, fjern
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded-md px-2 py-1.5 text-[12px] text-(--color-muted) transition-opacity hover:opacity-70"
+            >
+              Annuller
+            </button>
+          </>
+        ) : (
+          <>
+            <OutlineButton onClick={onEdit}>Rediger</OutlineButton>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setConfirming(true)}
+              className="rounded-md px-2 py-1.5 text-[12px] text-(--color-alert) transition-opacity hover:opacity-70 disabled:opacity-40"
+            >
+              Fjern
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

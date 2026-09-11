@@ -15,11 +15,11 @@ export function RoundRow({
   interviewCount: number;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [pending, startTransition] = useTransition();
   const [nameVal, setNameVal] = useState(name);
 
   function remove() {
-    if (!confirm(`Slet runden "${name}"? Alle ${interviewCount} interviews i runden slettes med.`)) return;
     startTransition(() => deleteRound(id));
   }
 
@@ -67,19 +67,40 @@ export function RoundRow({
         <div className="mt-0.5 text-[12.5px] text-(--color-muted)">{interviewCount} interviews</div>
       </div>
       <div className="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-          onClick={() => setEditing(true)}
-          className="text-[11px] text-(--color-faint) hover:text-(--color-text)"
-        >
-          Rediger
-        </button>
-        <button
-          onClick={remove}
-          disabled={pending}
-          className="text-[11px] text-(--color-faint) hover:text-(--color-alert)"
-        >
-          Slet
-        </button>
+        {confirming ? (
+          <>
+            <span className="text-[11px] text-(--color-alert)">Sikker?</span>
+            <button
+              onClick={remove}
+              disabled={pending}
+              className="text-[11px] font-medium text-(--color-alert) hover:opacity-70"
+            >
+              Ja, slet
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="text-[11px] text-(--color-faint) hover:text-(--color-text)"
+            >
+              Annullér
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-[11px] text-(--color-faint) hover:text-(--color-text)"
+            >
+              Rediger
+            </button>
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={pending}
+              className="text-[11px] text-(--color-faint) hover:text-(--color-alert)"
+            >
+              Slet
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
