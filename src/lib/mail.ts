@@ -39,6 +39,8 @@ export async function sendLoginCodeEmail(
   });
 
   // En fejl her betyder mailen ikke kom afsted — lad kalderen falde tilbage
-  // til at vise koden, i stedet for at brugeren står helt fast.
+  // til at vise koden, i stedet for at brugeren står helt fast. Logges
+  // alligevel, ellers er en forkert Resend-opsætning umulig at diagnosticere.
+  if (error) console.error("Resend-fejl ved afsendelse af login-kode:", error);
   return !error;
 }
