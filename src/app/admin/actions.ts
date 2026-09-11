@@ -94,10 +94,6 @@ export async function revokeAccess(engagementId: string, targetConsultantId: str
   const consultant = await requireConsultant();
   await assertOwnAccess(consultant.id, engagementId);
 
-  if (targetConsultantId === consultant.id) {
-    throw new Error("Du kan ikke fjerne din egen adgang herfra.");
-  }
-
   await db.consultantEngagementAccess.deleteMany({
     where: { consultantId: targetConsultantId, engagementId },
   });
@@ -107,6 +103,15 @@ export async function revokeAccess(engagementId: string, targetConsultantId: str
     targetId: engagementId,
     detail: `fra konsulent ${targetConsultantId}`,
   });
+
+  // Fjernede man sin egen adgang, kan man ikke længere se denne kundes
+  // sider (requireCustomerAccess ville give 404) — send i stedet direkte
+  // tilbage til kundelisten i stedet for at lande på en 404-side.
+  if (targetConsultantId === consultant.id) {
+    revalidatePath("/admin/customers");
+    redirect("/admin/customers");
+  }
+
   revalidatePath(`/admin/customers/${engagementId}`);
 }
 
