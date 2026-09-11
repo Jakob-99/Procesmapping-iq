@@ -3,14 +3,19 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ensureConsultantLoginCode, verifyConsultantLoginCode } from "@/lib/consultant-auth";
+import { sendLoginCodeEmail } from "@/lib/mail";
 import { ADMIN_COOKIE } from "@/lib/consultant-session";
 
-// Samme "ingen SMTP endnu"-situation som kundens login (se app/login/actions.ts)
-// — koden vises direkte på skærmen i stedet for at blive sendt.
-export async function requestAdminCode(email: string): Promise<{ code: string } | { error: string }> {
-  const code = await ensureConsultantLoginCode(email.trim().toLowerCase());
+// Samme mail/fallback-mønster som kundens login (se (customer)/login/actions.ts).
+export async function requestAdminCode(
+  email: string,
+): Promise<{ sent: true } | { code: string } | { error: string }> {
+  const trimmed = email.trim().toLowerCase();
+  const code = await ensureConsultantLoginCode(trimmed);
   if (!code) return { error: "Ingen konsulentkonto fundet med den mail." };
-  return { code };
+
+  const sent = await sendLoginCodeEmail(trimmed, code, "Corner IQ admin");
+  return sent ? { sent: true } : { code };
 }
 
 export async function loginWithAdminCode(code: string): Promise<{ error: string } | never> {

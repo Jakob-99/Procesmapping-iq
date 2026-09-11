@@ -3,15 +3,21 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ensureLoginCode, verifyLoginCode } from "@/lib/interview-auth";
+import { sendLoginCodeEmail } from "@/lib/mail";
 import { SESSION_COOKIE } from "@/lib/session";
 
-// Ingen mailudbyder koblet på endnu (samme situation som interview-invitationerne,
-// se sendInvite i app/processes/[processId]/[subId]/actions.ts) — koden vises
-// derfor direkte på skærmen i stedet for at blive sendt, indtil SMTP er sat op.
-export async function requestLoginCode(email: string): Promise<{ code: string } | { error: string }> {
-  const code = await ensureLoginCode(email.trim().toLowerCase());
+// Sender koden på mail når Resend er sat op (se lib/mail.ts) — er den ikke
+// konfigureret endnu, eller fejler afsendelsen, falder vi tilbage til at
+// vise koden direkte på skærmen, så login ikke går i stå.
+export async function requestLoginCode(
+  email: string,
+): Promise<{ sent: true } | { code: string } | { error: string }> {
+  const trimmed = email.trim().toLowerCase();
+  const code = await ensureLoginCode(trimmed);
   if (!code) return { error: "Ingen bruger fundet med den mail." };
-  return { code };
+
+  const sent = await sendLoginCodeEmail(trimmed, code, "Corner IQ");
+  return sent ? { sent: true } : { code };
 }
 
 export async function loginWithMainCode(code: string): Promise<{ error: string } | never> {

@@ -7,6 +7,7 @@ import { ClayButton } from "./ui";
 export function AdminLoginForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [shownCode, setShownCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -16,8 +17,12 @@ export function AdminLoginForm() {
     setError(null);
     startTransition(async () => {
       const res = await requestAdminCode(email);
-      if ("error" in res) setError(res.error);
-      else setShownCode(res.code);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      if ("code" in res) setShownCode(res.code);
+      setStep("code");
     });
   }
 
@@ -30,7 +35,7 @@ export function AdminLoginForm() {
     });
   }
 
-  if (shownCode === null) {
+  if (step === "email") {
     return (
       <div className="mx-auto max-w-xs">
         <input
@@ -58,14 +63,20 @@ export function AdminLoginForm() {
 
   return (
     <div className="mx-auto max-w-xs">
-      <div className="mb-4 rounded-lg border border-(--color-clay-line) bg-(--color-clay-wash) px-4 py-3 text-center">
-        <div className="text-[11px] text-(--color-muted)">
-          Ingen mailudsendelse endnu — din kode er
+      {shownCode !== null ? (
+        <div className="mb-4 rounded-lg border border-(--color-clay-line) bg-(--color-clay-wash) px-4 py-3 text-center">
+          <div className="text-[11px] text-(--color-muted)">
+            Ingen mailudsendelse endnu — din kode er
+          </div>
+          <div className="mt-1 text-[20px] font-semibold tracking-[0.2em] text-(--color-clay)">
+            {shownCode}
+          </div>
         </div>
-        <div className="mt-1 text-[20px] font-semibold tracking-[0.2em] text-(--color-clay)">
-          {shownCode}
-        </div>
-      </div>
+      ) : (
+        <p className="mb-4 text-center text-[13px] leading-relaxed text-(--color-muted)">
+          Vi har sendt en kode til <span className="font-medium text-(--color-text)">{email}</span>.
+        </p>
+      )}
       <input
         value={code}
         onChange={(e) => setCode(e.target.value)}

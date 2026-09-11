@@ -6,12 +6,13 @@ import { ClayButton } from "./ui";
 
 /*
   Samme to-trins mønster som MainLoginForm.tsx (org-brugernes login): mail
-  først, så koden. Ingen mailudbyder er koblet på endnu, så koden vises
-  direkte på skærmen efter trin 1.
+  først, så koden — sendt på mail når Resend er sat op (se lib/mail.ts),
+  ellers vist direkte på skærmen.
 */
 export function RespondentLoginForm() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [step, setStep] = useState<"email" | "code">("email");
   const [shownCode, setShownCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -21,8 +22,12 @@ export function RespondentLoginForm() {
     setError(null);
     startTransition(async () => {
       const res = await requestRespondentCode(email);
-      if ("error" in res) setError(res.error);
-      else setShownCode(res.code);
+      if ("error" in res) {
+        setError(res.error);
+        return;
+      }
+      if ("code" in res) setShownCode(res.code);
+      setStep("code");
     });
   }
 
@@ -35,7 +40,7 @@ export function RespondentLoginForm() {
     });
   }
 
-  if (shownCode === null) {
+  if (step === "email") {
     return (
       <div className="mx-auto max-w-xs">
         <input
@@ -63,14 +68,20 @@ export function RespondentLoginForm() {
 
   return (
     <div className="mx-auto max-w-xs">
-      <div className="mb-4 rounded-lg border border-(--color-clay-line) bg-(--color-clay-wash) px-4 py-3 text-center">
-        <div className="text-[11px] text-(--color-muted)">
-          Ingen mailudsendelse endnu — din kode er
+      {shownCode !== null ? (
+        <div className="mb-4 rounded-lg border border-(--color-clay-line) bg-(--color-clay-wash) px-4 py-3 text-center">
+          <div className="text-[11px] text-(--color-muted)">
+            Ingen mailudsendelse endnu — din kode er
+          </div>
+          <div className="mt-1 text-[20px] font-semibold tracking-[0.2em] text-(--color-clay)">
+            {shownCode}
+          </div>
         </div>
-        <div className="mt-1 text-[20px] font-semibold tracking-[0.2em] text-(--color-clay)">
-          {shownCode}
-        </div>
-      </div>
+      ) : (
+        <p className="mb-4 text-center text-[13px] leading-relaxed text-(--color-muted)">
+          Vi har sendt en kode til <span className="font-medium text-(--color-text)">{email}</span>.
+        </p>
+      )}
       <input
         value={code}
         onChange={(e) => setCode(e.target.value)}

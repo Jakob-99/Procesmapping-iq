@@ -4,15 +4,18 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { ensureRespondentLoginCode, verifyRespondentLoginCode } from "@/lib/respondent-auth";
+import { sendLoginCodeEmail } from "@/lib/mail";
 
 const COOKIE = "respondent_id";
 
 export async function requestRespondentCode(
   email: string,
-): Promise<{ code: string } | { error: string }> {
+): Promise<{ sent: true } | { code: string } | { error: string }> {
   const code = await ensureRespondentLoginCode(email);
   if (!code) return { error: "Ingen respondent er registreret med den mail." };
-  return { code };
+
+  const sent = await sendLoginCodeEmail(email.trim(), code, "dit interview");
+  return sent ? { sent: true } : { code };
 }
 
 export async function loginWithRespondentCode(code: string): Promise<{ error: string } | never> {
