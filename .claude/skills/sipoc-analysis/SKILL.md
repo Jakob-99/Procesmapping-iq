@@ -1,6 +1,6 @@
 ---
 name: sipoc-analysis
-description: Build or update a SIPOC analysis (Suppliers, Inputs, Process, Outputs, Customers) from a Corner IQ interview round, using the Corner IQ MCP connector's tools (list_rounds, get_round_transcripts, get_interview_transcript, get_round_insights). Use this whenever a Cornerstones consultant asks for a SIPOC, a process map, or "hvad siger interviewene om processen" for a specific interview round/undersøgelse — even if they don't say "SIPOC" explicitly but describe the five categories (leverandører, input, proces, output, kunder). Do NOT use this for general interview summaries or theme analysis that isn't structured as SIPOC — those already exist in Corner IQ's own Indsigter pages.
+description: Build or update a SIPOC analysis (Suppliers, Inputs, Process, Outputs, Customers) from a Corner IQ interview round, using the Corner IQ MCP connector's tools (list_rounds, get_round_transcripts, get_interview_transcript). Use this whenever a Cornerstones consultant asks for a SIPOC, a process map, or "hvad siger interviewene om processen" for a specific interview round/undersøgelse — even if they don't say "SIPOC" explicitly but describe the five categories (leverandører, input, proces, output, kunder).
 ---
 
 # SIPOC-analyse fra Corner IQ
@@ -19,17 +19,14 @@ proces der ikke er den konsulenten mener.
 
 ## 2. Hent evidensen
 
-For den valgte runde, kald:
-- `get_round_transcripts` — de rå samtaler for ALLE interviews i runden, respondent for respondent, i ét kald.
-- `get_round_insights` — allerede genererede temaer og udtrukne citater.
+For den valgte runde, kald `get_round_transcripts` — de rå samtaler for
+ALLE interviews i runden, respondent for respondent, i ét kald. Al evidens
+kommer direkte fra disse transskriptioner, ingen forudgenereret analyse at
+læne sig op ad.
 
 Skal du kun bruge ét bestemt interview (fx til at følge op på et enkelt
 citat), brug `get_interview_transcript(interviewId)` i stedet for at
 trække hele rundens transskriptioner igen.
-
-Brug insights som genvej til at finde relevante passager, men læs selve
-transskriptionerne for detaljer insights-laget ikke fangede (fx en konkret
-leverandør nævnt i forbifarten, eller et specifikt output-format).
 
 ## 3. Afgør: én proces eller flere?
 
@@ -88,6 +85,6 @@ eller iterere visuelt — ikke som standard for et hurtigt tjek i chatten.
 Kræver at Corner IQ's MCP-connector er tilføjet i Claude (Bearer-nøgle fra
 kundens eget Kontrolpanel → "MCP API-nøgler", se
 [src/app/api/mcp/route.ts](../../../src/app/api/mcp/route.ts)). Hvis
-værktøjerne `list_rounds`/`get_round_transcripts`/`get_round_insights`
+værktøjerne `list_rounds`/`get_round_transcripts`/`get_interview_transcript`
 ikke er tilgængelige, bed konsulenten tilføje connectoren først i stedet
 for at gætte på indholdet.

@@ -135,8 +135,6 @@ model Engagement {
   interviewRounds  InterviewRound[]
   interviews       Interview[]
   consultantAccess ConsultantEngagementAccess[]
-  themeClusters    ThemeCluster[]
-  quotes           Quote[]
   apiKeys          ApiKey[]
 }
 
@@ -243,8 +241,7 @@ model AgentImage {
 // derefter når man sender interviews ud (sammen med agent + respondenter).
 // Gør det muligt at sende samme agent ud flere gange over tid (fx
 // "Trivsel Q1", "Trivsel Q2") uden at deres indsigter blandes sammen —
-// indsigter (temaer/citater/spørg på tværs) er scoped til runden, ikke
-// agenten.
+// indsigter er scoped til runden, ikke agenten.
 model InterviewRound {
   id           String     @id @default(cuid())
   engagementId String
@@ -253,7 +250,6 @@ model InterviewRound {
   createdAt    DateTime   @default(now())
 
   interviews          Interview[]
-  themeClusters       ThemeCluster[]
   publicJoinForAgents InterviewAgent[]
 }
 
@@ -309,7 +305,6 @@ model Interview {
 
   messages     InterviewMessage[]
   notes        InterviewNote[]
-  quotes       Quote[]
   quantAnswers QuantAnswer[]
 }
 
@@ -321,39 +316,6 @@ model InterviewMessage {
   content     String
   imageLabel  String? // sat når denne agent-tur viste et AgentImage — bruges til at genskabe billedhistorikken ved genoptagelse
   createdAt   DateTime  @default(now())
-
-  quotes Quote[]
-}
-
-// Et AI-genereret tema, klynget ud fra InterviewNote på tværs af ALLE
-// interviews i én InterviewRound. Regenereres fra bunden ved hvert klik —
-// ikke additivt, se generateThemeClusters. Temaerne holdes pr. runde, ikke
-// pr. engagement eller agent — to forskellige runder (fx "Trivsel Q1" og
-// "Trivsel Q2", begge med samme agent) skal ikke blandes sammen.
-model ThemeCluster {
-  id               String         @id @default(cuid())
-  engagementId     String
-  engagement       Engagement     @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  interviewRoundId String
-  interviewRound   InterviewRound @relation(fields: [interviewRoundId], references: [id], onDelete: Cascade)
-  title            String
-  summary          String
-  noteIds          String // JSON array af InterviewNote-id'er analysen bygger på
-  createdAt        DateTime       @default(now())
-}
-
-// Et manuelt udtrukket citat fra en transskription — "quote stitching".
-model Quote {
-  id           String            @id @default(cuid())
-  engagementId String
-  engagement   Engagement        @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  interviewId  String
-  interview    Interview         @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  messageId    String?
-  message      InterviewMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  text         String
-  tag          String?
-  createdAt    DateTime          @default(now())
 }
 
 // Det agenten fandt værd at huske fra interviewet.

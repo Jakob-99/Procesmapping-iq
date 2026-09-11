@@ -2,7 +2,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db";
 
-// Alle fire tools er read-only og tager udgangspunkt i InterviewRound — det
+// Alle tools er read-only og tager udgangspunkt i InterviewRound — det
 // nærmeste appen har på "et gruppeinterview": en navngivet samling af
 // afsendte 1:1-interviews man analyserer samlet (se model-kommentaren i
 // prisma/schema.prisma). Hvert tool scoper altid til den engagementId som
@@ -163,37 +163,6 @@ export function registerTools(server: McpServer, engagementId: string) {
         completedAt: interview.completedAt,
         transcript: interview.messages.map((m) => ({ role: m.role, content: m.content })),
       });
-    },
-  );
-
-  server.registerTool(
-    "get_round_insights",
-    {
-      title: "Get round insights",
-      description:
-        "Henter genererede temaer og udtrukne citater for en runde — brug id fra list_rounds.",
-      inputSchema: { roundId: z.string().describe("Id for interview-runden (fra list_rounds)") },
-    },
-    async ({ roundId }) => {
-      const round = await assertRoundInEngagement(roundId, engagementId);
-      if (!round) {
-        return { content: [{ type: "text" as const, text: "Runden findes ikke." }], isError: true };
-      }
-
-      const [themes, quotes] = await Promise.all([
-        db.themeCluster.findMany({
-          where: { interviewRoundId: roundId },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, title: true, summary: true },
-        }),
-        db.quote.findMany({
-          where: { engagementId, interview: { interviewRoundId: roundId } },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, text: true, tag: true },
-        }),
-      ]);
-
-      return jsonResult({ roundName: round.name, themes, quotes });
     },
   );
 }

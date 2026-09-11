@@ -1,7 +1,7 @@
 // Respondent.categories gemmes som et JSON-array i en String-kolonne —
-// samme mønster som QuantQuestion.options og ThemeCluster.noteIds i denne
-// kodebase, i stedet for en relationstabel, da SQLite ikke har en
-// arraytype og listen aldrig forespørges på tværs af respondenter i SQL.
+// samme mønster som QuantQuestion.options i denne kodebase, i stedet for
+// en relationstabel, da SQLite ikke har en arraytype og listen aldrig
+// forespørges på tværs af respondenter i SQL.
 export function parseCategories(raw: string | null): string[] {
   if (!raw) return [];
   try {

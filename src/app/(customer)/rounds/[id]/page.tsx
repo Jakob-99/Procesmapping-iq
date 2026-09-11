@@ -3,19 +3,20 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
+import { parseCategories } from "@/lib/categories";
 import { PageHeader } from "@/components/PageHeader";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
-import { Panel, Empty } from "@/components/ui";
+import { Panel, Empty, Badge, Stat } from "@/components/ui";
 import { SendInterviewForm } from "@/components/SendInterviewForm";
 import { RoundPublicJoin } from "@/components/RoundPublicJoin";
 import { InterviewList } from "@/components/InterviewList";
-import { InsightsTabs } from "@/components/InsightsTabs";
+import { DownloadAllButton } from "@/components/RoundTranscriptDownload";
 
 export const dynamic = "force-dynamic";
 
-// Rundens egen side — "en undersøgelse" man kan gå ind i. Herfra sender man
-// interviews til respondenter OG styrer offentlig invitation, i stedet for
-// at de to ting lå spredt på henholdsvis /interviews og agent-siden.
+// Rundens egen side — "en undersøgelse" man kan gå ind i. Nøgletal, afsendelse
+// og offentlig invitation ligger samlet ét sted i stedet for spredt over en
+// fanebjælke — der er kun denne ene visning pr. runde.
 export default async function RoundDetailPage({
   params,
 }: {
@@ -32,10 +33,34 @@ export default async function RoundDetailPage({
     db.respondent.findMany({ where: { engagementId: engagement.id }, orderBy: { name: "asc" } }),
     db.interview.findMany({
       where: { interviewRoundId: id },
-      include: { interviewAgent: true, respondent: true, sentBy: true, interviewRound: true },
+      include: {
+        interviewAgent: true,
+        respondent: true,
+        sentBy: true,
+        interviewRound: true,
+        messages: { orderBy: { createdAt: "asc" } },
+      },
       orderBy: { startedAt: "desc" },
     }),
   ]);
+
+  const completedCount = interviews.filter((iv) => iv.status === "COMPLETED").length;
+  const openCount = interviews.length - completedCount;
+  const categoryCounts = new Map<string, number>();
+  for (const iv of interviews) {
+    for (const cat of parseCategories(iv.respondent.categories)) {
+      categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+    }
+  }
+
+  const downloadData = interviews.map((iv) => ({
+    id: iv.id,
+    agentName: iv.interviewAgent.name,
+    respondentName: iv.respondent.name,
+    status: iv.status,
+    startedAt: iv.startedAt,
+    messages: iv.messages.map((m) => ({ role: m.role, content: m.content })),
+  }));
 
   const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
@@ -70,7 +95,25 @@ export default async function RoundDetailPage({
       />
 
       <div className="p-8">
-        <InsightsTabs roundId={round.id} roundName={round.name} />
+        <div className="mb-8 grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <Stat label="Interviews" value={interviews.length} />
+          <Stat label="Afsluttet" value={completedCount} />
+          <Stat label="Afventer svar" value={openCount} accent={openCount > 0} />
+          <Stat label="Forretningsområder" value={categoryCounts.size} />
+        </div>
+
+        {categoryCounts.size > 0 && (
+          <div className="mb-8">
+            <div className="eyebrow mb-3">Fordelt på forretningsområde</div>
+            <div className="flex flex-wrap gap-2">
+              {Array.from(categoryCounts.entries()).map(([cat, count]) => (
+                <Badge key={cat} tone="muted">
+                  {cat} · {count}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
 
         <Panel title="Send interview" className="mb-6">
           {agents.length === 0 || respondents.length === 0 ? (
@@ -92,7 +135,10 @@ export default async function RoundDetailPage({
           <RoundPublicJoin roundId={round.id} agents={agentJoinStates} />
         </Panel>
 
-        <div className="eyebrow mb-3">Sendte interviews</div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="eyebrow">Sendte interviews</div>
+          <DownloadAllButton interviews={downloadData} />
+        </div>
         <InterviewList interviews={interviews} />
       </div>
     </div>
