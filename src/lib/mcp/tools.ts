@@ -131,6 +131,42 @@ export function registerTools(server: McpServer, engagementId: string) {
   );
 
   server.registerTool(
+    "get_interview_transcript",
+    {
+      title: "Get single interview transcript",
+      description:
+        "Henter den fulde transskription for ét enkelt interview — brug interviewId fra get_round eller get_round_transcripts. Billigere end get_round_transcripts når man kun skal bruge ét interview fra en stor runde.",
+      inputSchema: { interviewId: z.string().describe("Id for interviewet (fra get_round eller get_round_transcripts)") },
+    },
+    async ({ interviewId }) => {
+      const interview = await db.interview.findUnique({
+        where: { id: interviewId },
+        include: {
+          respondent: { select: { name: true, title: true } },
+          interviewAgent: { select: { name: true } },
+          interviewRound: { select: { name: true } },
+          messages: { orderBy: { createdAt: "asc" }, select: { role: true, content: true } },
+        },
+      });
+      if (!interview || interview.engagementId !== engagementId) {
+        return { content: [{ type: "text" as const, text: "Interviewet findes ikke." }], isError: true };
+      }
+
+      return jsonResult({
+        id: interview.id,
+        roundName: interview.interviewRound.name,
+        respondent: interview.respondent.name,
+        respondentTitle: interview.respondent.title,
+        agent: interview.interviewAgent.name,
+        status: interview.status,
+        startedAt: interview.startedAt,
+        completedAt: interview.completedAt,
+        transcript: interview.messages.map((m) => ({ role: m.role, content: m.content })),
+      });
+    },
+  );
+
+  server.registerTool(
     "get_round_insights",
     {
       title: "Get round insights",

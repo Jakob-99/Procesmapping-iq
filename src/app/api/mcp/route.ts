@@ -45,7 +45,7 @@ function jsonRpcError(id: unknown, code: number, message: string) {
 }
 
 export async function POST(req: Request) {
-  const auth = await resolveApiKey(req.headers.get("authorization"));
+  const auth = await resolveApiKey(req.headers);
   if (!auth) {
     return NextResponse.json(
       { jsonrpc: "2.0", id: null, error: { code: -32001, message: "Ugyldig eller manglende API-nøgle." } },
