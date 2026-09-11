@@ -29,15 +29,20 @@ export default async function CustomerLayout({
       })
     : null;
 
-  // Forbedringsforslag skal kunne ses og pinnes/un-pinnes direkte fra menuen,
-  // ikke kun på selve Forbedringer-siden — så man kan holde øje med dem
-  // uanset hvor man er. Skal scopes til egen organisation, ellers ville man
-  // se (og kunne pinne) andre kunders forslag.
-  const proposals = sessionUser
-    ? await db.aiosProposal.findMany({
-        where: { improvement: { engagement: { organizationId: sessionUser.organizationId } } },
-        select: { id: true, name: true, selected: true },
-        orderBy: { name: "asc" },
+  // MCP-nøgler hører til engagementet, ikke organisationen direkte (se
+  // ApiKey i schema.prisma) — samme "første engagement for organisationen"
+  // som requireEngagement() bruger (lib/engagement.ts).
+  const engagement = organization
+    ? await db.engagement.findFirst({
+        where: { organizationId: organization.id },
+        orderBy: { createdAt: "asc" },
+      })
+    : null;
+  const apiKeys = engagement
+    ? await db.apiKey.findMany({
+        where: { engagementId: engagement.id, revokedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, createdAt: true, lastUsedAt: true },
       })
     : [];
 
@@ -77,7 +82,12 @@ export default async function CustomerLayout({
                 }))
               : []
           }
-          proposals={proposals}
+          apiKeys={apiKeys.map((k) => ({
+            id: k.id,
+            name: k.name,
+            createdAt: k.createdAt.toISOString(),
+            lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+          }))}
         />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>

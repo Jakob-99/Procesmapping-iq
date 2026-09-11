@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { createCustomer } from "@/app/admin/actions";
-import { ROLES } from "@/lib/domain";
+import { ROLES } from "@/lib/roles";
 import { ClayButton, Panel } from "./ui";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

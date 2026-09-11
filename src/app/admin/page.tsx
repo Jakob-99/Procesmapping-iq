@@ -42,8 +42,6 @@ export default async function AdminDashboard() {
     }),
   ]);
 
-  const liveCount = access.filter((a) => a.engagement.stage === "LIVE").length;
-
   return (
     <div>
       <PageHeader
@@ -57,9 +55,8 @@ export default async function AdminDashboard() {
       />
 
       <div className="space-y-6 p-8">
-        <div className="grid grid-cols-3 gap-3 sm:max-w-md">
+        <div className="grid grid-cols-2 gap-3 sm:max-w-sm">
           <Stat label="Kunder" value={access.length} />
-          <Stat label="I drift" value={liveCount} />
           <Stat label="Konsulenter" value={consultantCount} />
         </div>
 
@@ -79,7 +76,7 @@ export default async function AdminDashboard() {
                       {a.engagement.organization.name}
                     </span>
                     <span className="shrink-0 text-[11px] text-(--color-faint)">
-                      {a.engagement.stage}
+                      {a.engagement.name}
                     </span>
                   </Link>
                 ))}

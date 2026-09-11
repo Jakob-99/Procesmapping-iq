@@ -1,9 +1,16 @@
+import { redirect } from "next/navigation";
 import { AdminLoginForm } from "@/components/AdminLoginForm";
 import { Logo } from "@/components/Logo";
+import { getConsultantSession } from "@/lib/consultant-session";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminLoginPage() {
+export default async function AdminLoginPage() {
+  // Allerede logget ind som konsulent — vis aldrig login-formularen oveni
+  // admin-panelets eget nav, send i stedet direkte videre til dashboardet.
+  const consultant = await getConsultantSession();
+  if (consultant) redirect("/admin");
+
   return (
     <div className="dot-grid flex h-full items-center justify-center p-8">
       <div className="w-full max-w-xs text-center">

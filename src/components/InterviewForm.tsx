@@ -16,7 +16,7 @@ export function InterviewForm({
 }: {
   title: string;
   fields: FormField[];
-  onSubmit: (summary: string) => void;
+  onSubmit: (summary: string, values: Record<string, string | string[]>) => void;
   disabled?: boolean;
 }) {
   const [values, setValues] = useState<Record<string, string | string[]>>({});
@@ -54,7 +54,7 @@ export function InterviewForm({
         return `${f.label}: ${text || "(ikke besvaret)"}`;
       })
       .join("\n");
-    onSubmit(summary);
+    onSubmit(summary, values);
   }
 
   const base =

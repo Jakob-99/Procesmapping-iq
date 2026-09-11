@@ -3,29 +3,31 @@
 import { useState, useTransition } from "react";
 import { Modal } from "./Modal";
 import { ClayButton, OutlineButton } from "./ui";
+import { ApiKeyManager } from "./ApiKeyManager";
 import {
   updateOrganizationName,
   createUser,
   updateUser,
   deleteUser,
 } from "@/app/actions/organization";
-import { ROLES, type Role } from "@/lib/domain";
+import { ROLES, type Role } from "@/lib/roles";
 
 type OrgUser = { id: string; name: string; email: string; role: string };
+type ApiKeyRow = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
 
 const PAGES = [
   { key: "organisation", label: "Organisation" },
   { key: "brugere", label: "Brugere" },
+  { key: "mcp", label: "MCP API-nøgler" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
 
 /*
   Kontrolpanelet: organisationens navn, og listen af brugere — dem der kan
-  logge ind og bruge systemet. IKKE det samme som respondenter/eksperter
-  (SubProcessExpert), som er dem interviews sendes ud til — en bruger kan
-  vælges som kilde til en ny respondent (se addExpertFromUser), men de to
-  begreber holdes bevidst adskilt i UI'en.
+  logge ind og bruge systemet. IKKE det samme som Respondenter (se
+  /respondents), som er dem interviews sendes ud til — de to begreber holdes
+  bevidst adskilt i UI'en.
   Siderne vælges i en sidemenu, ligesom resten af appens navigation, i stedet
   for at ligge stablet under hinanden i én lang scroll.
 */
@@ -34,11 +36,13 @@ export function OrgSettingsModal({
   onClose,
   organization,
   users,
+  apiKeys,
 }: {
   open: boolean;
   onClose: () => void;
   organization: { id: string; name: string };
   users: OrgUser[];
+  apiKeys: ApiKeyRow[];
 }) {
   const [page, setPage] = useState<PageKey>("organisation");
 
@@ -67,6 +71,7 @@ export function OrgSettingsModal({
         {page === "brugere" && (
           <UsersSection organizationId={organization.id} users={users} />
         )}
+        {page === "mcp" && <ApiKeyManager keys={apiKeys} />}
       </div>
     </Modal>
   );

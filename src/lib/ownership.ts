@@ -1,83 +1,61 @@
 import { db } from "./db";
 import { requireEngagement } from "./engagement";
 
-// Skrive-siden manglede ejerskabstjek: en server action der tager et id ind
-// (processId, subProcessId, ...) opdaterede/slettede rækken uden at tjekke om
-// den overhovedet hører til den indloggede brugers engagement — kun læse-siden
-// (sider) var hærdet efter multi-tenant-omlægningen. Disse hjælpere lukker det
-// hul ét sted, så hver action kan kalde ét kald i stedet for at gentage
-// opslaget selv. Kaster ved mismatch/manglende række — det er en tamper-vej,
-// ikke noget der sker ved normal brug.
+// Enhver server action der tager et id fra klienten skal tjekke at rækken
+// rent faktisk hører til den indloggede brugers engagement, ikke en
+// tilfældig anden kundes — ellers kan man mutere data på tværs af kunder ved
+// at kende/gætte et cuid. Kaster ved mismatch/manglende række — det er en
+// tamper-vej, ikke noget der sker ved normal brug.
 async function assertEngagementId(engagementId: string | null | undefined) {
   const engagement = await requireEngagement();
   if (engagementId !== engagement.id) throw new Error("Ikke fundet.");
   return engagement;
 }
 
-export async function assertProcessOwnership(processId: string) {
-  const process = await db.process.findUnique({
-    where: { id: processId },
+export async function assertRespondentOwnership(respondentId: string) {
+  const respondent = await db.respondent.findUnique({
+    where: { id: respondentId },
     select: { engagementId: true },
   });
-  return assertEngagementId(process?.engagementId);
+  return assertEngagementId(respondent?.engagementId);
 }
 
-export async function assertSubProcessOwnership(subProcessId: string) {
-  const sub = await db.subProcess.findUnique({
-    where: { id: subProcessId },
-    select: { process: { select: { engagementId: true } } },
-  });
-  return assertEngagementId(sub?.process.engagementId);
-}
-
-export async function assertSystemOwnership(systemId: string) {
-  const system = await db.systemRef.findUnique({
-    where: { id: systemId },
+export async function assertInterviewAgentOwnership(agentId: string) {
+  const agent = await db.interviewAgent.findUnique({
+    where: { id: agentId },
     select: { engagementId: true },
   });
-  return assertEngagementId(system?.engagementId);
+  return assertEngagementId(agent?.engagementId);
 }
 
-export async function assertDataObjectOwnership(dataObjectId: string) {
-  const dataObject = await db.dataObject.findUnique({
-    where: { id: dataObjectId },
+export async function assertInterviewOwnership(interviewId: string) {
+  const interview = await db.interview.findUnique({
+    where: { id: interviewId },
     select: { engagementId: true },
   });
-  return assertEngagementId(dataObject?.engagementId);
+  return assertEngagementId(interview?.engagementId);
 }
 
-export async function assertRoleOwnership(roleId: string) {
-  const role = await db.businessRole.findUnique({
-    where: { id: roleId },
+export async function assertQuantQuestionOwnership(quantQuestionId: string) {
+  const question = await db.quantQuestion.findUnique({
+    where: { id: quantQuestionId },
+    select: { interviewAgent: { select: { engagementId: true } } },
+  });
+  return assertEngagementId(question?.interviewAgent.engagementId);
+}
+
+export async function assertAgentImageOwnership(agentImageId: string) {
+  const image = await db.agentImage.findUnique({
+    where: { id: agentImageId },
+    select: { interviewAgent: { select: { engagementId: true } } },
+  });
+  return assertEngagementId(image?.interviewAgent.engagementId);
+}
+
+export async function assertInterviewRoundOwnership(roundId: string) {
+  const round = await db.interviewRound.findUnique({
+    where: { id: roundId },
     select: { engagementId: true },
   });
-  return assertEngagementId(role?.engagementId);
-}
-
-export async function assertProposalOwnership(proposalId: string) {
-  const proposal = await db.aiosProposal.findUnique({
-    where: { id: proposalId },
-    select: { improvement: { select: { engagementId: true } } },
-  });
-  return assertEngagementId(proposal?.improvement.engagementId);
-}
-
-export async function assertExpertOwnership(expertId: string) {
-  const expert = await db.subProcessExpert.findUnique({
-    where: { id: expertId },
-    select: { subProcess: { select: { process: { select: { engagementId: true } } } } },
-  });
-  return assertEngagementId(expert?.subProcess.process.engagementId);
-}
-
-// Bruges hvor et id fra klienten peger på en User (assignee, validator,
-// procesekspert) — sikrer at brugeren rent faktisk hører til samme
-// organisation som det aktive engagement, ikke en tilfældig anden kunde.
-export async function assertUserInEngagement(userId: string) {
-  const engagement = await requireEngagement();
-  const user = await db.user.findUnique({ where: { id: userId }, select: { organizationId: true } });
-  if (!user || user.organizationId !== engagement.organizationId) {
-    throw new Error("Ikke fundet.");
-  }
-  return engagement;
+  return assertEngagementId(round?.engagementId);
 }
