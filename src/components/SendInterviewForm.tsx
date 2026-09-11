@@ -13,14 +13,18 @@ export function SendInterviewForm({
   agents,
   respondents,
   rounds,
+  lockedRoundId,
 }: {
   agents: Agent[];
   respondents: Respondent[];
   rounds: Round[];
+  // Sat når formularen vises inde på selve rundens side — runden er så givet
+  // af konteksten, og rundevælgeren skal ikke vises.
+  lockedRoundId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [agentId, setAgentId] = useState(agents[0]?.id ?? "");
-  const [roundId, setRoundId] = useState(rounds[0]?.id ?? "");
+  const [roundId, setRoundId] = useState(lockedRoundId ?? rounds[0]?.id ?? "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -62,20 +66,22 @@ export function SendInterviewForm({
 
   return (
     <div className="mb-5 space-y-3 rounded-xl border border-(--color-line-soft) bg-(--color-raised) p-4">
-      <div>
-        <div className="eyebrow mb-1.5">Interview runde</div>
-        <select
-          value={roundId}
-          onChange={(e) => setRoundId(e.target.value)}
-          className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[13px] outline-none focus:border-(--color-clay)"
-        >
-          {rounds.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!lockedRoundId && (
+        <div>
+          <div className="eyebrow mb-1.5">Interview runde</div>
+          <select
+            value={roundId}
+            onChange={(e) => setRoundId(e.target.value)}
+            className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[13px] outline-none focus:border-(--color-clay)"
+          >
+            {rounds.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div>
         <div className="eyebrow mb-1.5">Interview agent</div>

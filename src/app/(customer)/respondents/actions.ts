@@ -10,6 +10,7 @@ export async function createRespondent(
   email: string,
   title?: string,
   notes?: string,
+  category?: string,
 ) {
   if (!name.trim() || !email.trim()) return null;
   const engagement = await requireEngagement();
@@ -20,6 +21,7 @@ export async function createRespondent(
       email: email.trim(),
       title: title?.trim() || null,
       notes: notes?.trim() || null,
+      category: category?.trim() || null,
     },
   });
   revalidatePath("/respondents");
@@ -32,6 +34,7 @@ export async function updateRespondent(
   email: string,
   title?: string,
   notes?: string,
+  category?: string,
 ) {
   await assertRespondentOwnership(id);
   if (!name.trim() || !email.trim()) return;
@@ -42,6 +45,7 @@ export async function updateRespondent(
       email: email.trim(),
       title: title?.trim() || null,
       notes: notes?.trim() || null,
+      category: category?.trim() || null,
     },
   });
   revalidatePath("/respondents");
@@ -54,7 +58,7 @@ export async function deleteRespondent(id: string) {
 }
 
 export async function importRespondents(
-  rows: { name: string; email: string; title?: string }[],
+  rows: { name: string; email: string; title?: string; category?: string }[],
 ): Promise<{ imported: number }> {
   const engagement = await requireEngagement();
   const valid = rows.filter((r) => r.name.trim() && r.email.trim());
@@ -62,12 +66,13 @@ export async function importRespondents(
     valid.map((r) =>
       db.respondent.upsert({
         where: { engagementId_email: { engagementId: engagement.id, email: r.email.trim() } },
-        update: { name: r.name.trim(), title: r.title?.trim() || null },
+        update: { name: r.name.trim(), title: r.title?.trim() || null, category: r.category?.trim() || null },
         create: {
           engagementId: engagement.id,
           name: r.name.trim(),
           email: r.email.trim(),
           title: r.title?.trim() || null,
+          category: r.category?.trim() || null,
         },
       }),
     ),

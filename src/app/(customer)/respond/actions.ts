@@ -41,10 +41,11 @@ export async function saveInterviewMessage(
   interviewId: string,
   role: "agent" | "user",
   content: string,
+  imageLabel?: string | null,
 ) {
   if (!content.trim()) return;
   await db.interviewMessage.create({
-    data: { interviewId, role, content },
+    data: { interviewId, role, content, imageLabel: imageLabel || null },
   });
 }
 

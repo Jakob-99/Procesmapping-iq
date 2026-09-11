@@ -19,12 +19,14 @@ function step(ctx: MockContext): Omit<AgentTurn, "done"> {
         say: "Hej! Fortæl med dine egne ord, hvordan det har været — start hvor du vil.",
         form: null,
         keynote: null,
+        showImage: null,
       };
     case 1:
       return {
         say: "Kan du give et konkret eksempel på det?",
         form: null,
         keynote: null,
+        showImage: null,
       };
     case 2:
       return {
@@ -34,6 +36,7 @@ function step(ctx: MockContext): Omit<AgentTurn, "done"> {
           category: "PAIN",
           content: "(mock) Respondenten har nævnt noget udfordrende — bør bekræftes i et rigtigt interview.",
         },
+        showImage: null,
       };
     case 3:
       return {
@@ -45,12 +48,14 @@ function step(ctx: MockContext): Omit<AgentTurn, "done"> {
           ],
         },
         keynote: null,
+        showImage: null,
       };
     default:
       return {
         say: "Tak — det giver mig et godt billede. Det var det, jeg havde brug for at spørge om.",
         form: null,
         keynote: null,
+        showImage: null,
       };
   }
 }

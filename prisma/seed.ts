@@ -99,6 +99,91 @@ async function main() {
     },
   });
 
+  const sipoc = await db.interviewAgent.create({
+    data: {
+      engagementId: engagement.id,
+      name: "SIPOC-kortlægning",
+      purpose:
+        "Kortlæg en proces efter SIPOC-modellen: Suppliers (leverandører), Inputs (input), " +
+        "Process (de overordnede procestrin), Outputs (output) og Customers (modtagere) — så " +
+        "processens grænser og bidragydere er tydelige, før den kortlægges i detaljer i BPMN.",
+      prequalification: "Personen skal selv udføre eller være tæt på den proces, der skal kortlægges.",
+      investigate:
+        "Følg SIPOC-rækkefølgen bagfra og frem: start med at få afklaret hvem der modtager processens " +
+        "resultat (Customers) og hvad de modtager (Outputs) — det er lettest at starte konkret dér. " +
+        "Gå derefter til de overordnede procestrin (Process, typisk 4-7 høj-niveau-trin, ikke hvert eneste " +
+        "klik) og spørg til hvor processen reelt starter og slutter. Slut med at afdække hvad der skal " +
+        "være til stede for at kunne gå i gang (Inputs) og hvem der leverer det (Suppliers) — både interne " +
+        "afdelinger og eksterne leverandører tæller. Bed altid om et konkret eksempel frem for en generel " +
+        "beskrivelse, og spørg ind til undtagelser (hvad sker der, hvis input mangler eller er forkert?).",
+      followUpLevel: 4,
+      formalityLevel: 3,
+      questionLengthLevel: 2,
+    },
+  });
+
+  const skillUndersoegelse = await db.interviewAgent.create({
+    data: {
+      engagementId: engagement.id,
+      name: "Skill-undersøgelse",
+      purpose:
+        "Afdæk konkrete muligheder for at lade en AI-skill overtage eller lette dele af " +
+        "medarbejderens arbejde — med fokus på afgrænsede, gentagne opgaver inden for ét " +
+        "forretningsområde og én eller flere processer, ikke arbejdet som helhed.",
+      prequalification:
+        "Få afklaret hvilket forretningsområde og hvilken/hvilke proces(ser) respondenten " +
+        "arbejder med — det kan være flere. Spørg respondenten hvilke af følgende der passer, " +
+        "i stedet for at gætte:\n\n" +
+        "Økonomi: Bogføring, Fakturering, Betalingsafstemning, Budgettering og forecast, " +
+        "Lønadministration, Regnskabsafslutning og rapportering\n" +
+        "HR: Rekruttering, Onboarding, Ferie og fravær, MUS-samtaler, Personaleadministration\n" +
+        "Salg og CRM: Leadhåndtering, Tilbudsgivning, Ordrebehandling, Kundeopfølgning, " +
+        "Vedligeholdelse af CRM-data\n" +
+        "Indkøb og supply chain: Indkøbsbestilling, Leverandørstyring, Lagerstyring, Fragt og levering\n" +
+        "Kundeservice: Sagsbehandling, Support-henvendelser, Vedligeholdelse af FAQ/vidensbase, Reklamationer\n" +
+        "IT og drift: Brugeroprettelse og adgangsstyring, Support-tickets, Systemvedligeholdelse, Rapportgenerering\n" +
+        "Marketing: Kampagnestyring, Content-produktion, Performance-rapportering",
+      investigate:
+        "Når du kender forretningsområdet og processen/processerne, så stil de spørgsmål der " +
+        "præcist afdækker om der er en skill-mulighed i den valgte proces — du skal IKKE bygge " +
+        "skill'en, kun finde og beskrive muligheden.\n\n" +
+        "Spørg konkret ind til:\n" +
+        "- Hvilke opgaver i processen udføres ofte/gentagne gange, og hvor meget tid bruges der " +
+        "på dem (pr. gang og samlet pr. uge/måned)?\n" +
+        "- Hvor meget af opgaven er regelbaseret og forudsigelig (samme trin hver gang) versus " +
+        "kræver vurdering, kontekst eller undtagelseshåndtering?\n" +
+        "- Hvilke systemer og data indgår, og hvor meget er manuel indtastning, copy-paste mellem " +
+        "systemer, eller ventetid på svar fra andre?\n" +
+        "- Hvad er de typiske fejl eller kvalitetsproblemer i opgaven i dag?\n\n" +
+        "Spørg altid afslutningsvis ind til konsekvensen: 'Hvad ville det betyde for dig, hvis en " +
+        "AI-skill kunne overtage denne opgave?' — bor i både det praktiske (tid frigjort, hvad tiden " +
+        "ville blive brugt på i stedet) og det følelsesmæssige (tryghed, bekymring for eget ansvar " +
+        "eller rolle, tillid til at en AI kan gøre det rigtigt). Tag bekymringer alvorligt, undgå at " +
+        "sælge idéen.",
+      followUpLevel: 4,
+      formalityLevel: 3,
+      questionLengthLevel: 2,
+    },
+  });
+  void skillUndersoegelse;
+
+  await db.quantQuestion.createMany({
+    data: [
+      {
+        interviewAgentId: sipoc.id,
+        prompt: "Hvor mange forskellige leverandører (interne eller eksterne) leverer input til processen?",
+        type: "SCALE",
+        sortOrder: 0,
+      },
+      {
+        interviewAgentId: sipoc.id,
+        prompt: "Hvor tydeligt er det for dig, hvor processen starter og slutter?",
+        type: "SCALE",
+        sortOrder: 1,
+      },
+    ],
+  });
+
   // ------------------------------------------------------------- interview-runder
   const [onboardingRound, trivselRound] = await Promise.all(
     [

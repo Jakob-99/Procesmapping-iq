@@ -18,7 +18,8 @@ import { updateOwnProfile } from "@/app/actions/profile";
 const SECTIONS: Record<string, string> = {
   respondents: "Respondenter",
   agents: "Interview agenter",
-  interviews: "Interviews",
+  interviews: "Undersøgelser",
+  rounds: "Undersøgelser",
 };
 
 function Chevron() {

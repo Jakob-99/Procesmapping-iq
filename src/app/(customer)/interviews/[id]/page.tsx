@@ -8,6 +8,7 @@ import { NOTE_CATEGORIES } from "@/lib/interview";
 import type { Tone } from "@/components/ui";
 import { DeleteInterviewButton } from "@/components/DeleteInterviewButton";
 import { QuoteButton } from "@/components/QuoteButton";
+import { daysAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -48,12 +49,15 @@ export default async function InterviewDetailPage({
     <div>
       <SetBreadcrumb
         items={[
-          { label: "Interviews", href: "/interviews" },
+          { label: "Undersøgelser", href: "/interviews" },
+          { label: interview.interviewRound.name, href: `/rounds/${interview.interviewRoundId}` },
           { label: `${interview.interviewAgent.name} · ${interview.respondent.name}` },
         ]}
       />
       <PageHeader
-        eyebrow={`${STATUS_LABEL[interview.status] ?? interview.status} · ${interview.interviewRound.name}`}
+        eyebrow={`${STATUS_LABEL[interview.status] ?? interview.status}${
+          interview.status === "OPEN" ? ` · sendt ${daysAgo(interview.startedAt)}` : ""
+        } · ${interview.interviewRound.name}`}
         title={`${interview.interviewAgent.name} — ${interview.respondent.name}`}
         action={<DeleteInterviewButton id={interview.id} />}
       />

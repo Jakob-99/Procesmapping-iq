@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Modal } from "./Modal";
 import { ClayButton, OutlineButton } from "./ui";
+import { ApiKeyManager } from "./ApiKeyManager";
 import {
   updateOrganizationName,
   createUser,
@@ -12,10 +13,12 @@ import {
 import { ROLES, type Role } from "@/lib/roles";
 
 type OrgUser = { id: string; name: string; email: string; role: string };
+type ApiKeyRow = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
 
 const PAGES = [
   { key: "organisation", label: "Organisation" },
   { key: "brugere", label: "Brugere" },
+  { key: "mcp", label: "MCP API-nøgler" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
@@ -33,11 +36,13 @@ export function OrgSettingsModal({
   onClose,
   organization,
   users,
+  apiKeys,
 }: {
   open: boolean;
   onClose: () => void;
   organization: { id: string; name: string };
   users: OrgUser[];
+  apiKeys: ApiKeyRow[];
 }) {
   const [page, setPage] = useState<PageKey>("organisation");
 
@@ -66,6 +71,7 @@ export function OrgSettingsModal({
         {page === "brugere" && (
           <UsersSection organizationId={organization.id} users={users} />
         )}
+        {page === "mcp" && <ApiKeyManager keys={apiKeys} />}
       </div>
     </Modal>
   );

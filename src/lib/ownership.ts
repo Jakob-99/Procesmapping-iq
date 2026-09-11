@@ -52,6 +52,14 @@ export async function assertQuantQuestionOwnership(quantQuestionId: string) {
   return assertEngagementId(question?.interviewAgent.engagementId);
 }
 
+export async function assertAgentImageOwnership(agentImageId: string) {
+  const image = await db.agentImage.findUnique({
+    where: { id: agentImageId },
+    select: { interviewAgent: { select: { engagementId: true } } },
+  });
+  return assertEngagementId(image?.interviewAgent.engagementId);
+}
+
 export async function assertInterviewRoundOwnership(roundId: string) {
   const round = await db.interviewRound.findUnique({
     where: { id: roundId },

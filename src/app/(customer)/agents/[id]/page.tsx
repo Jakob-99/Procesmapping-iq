@@ -1,6 +1,4 @@
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import QRCode from "qrcode";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
@@ -8,7 +6,7 @@ import { AgentEditor } from "@/components/AgentEditor";
 import { Panel } from "@/components/ui";
 import { QuantQuestionsEditor } from "@/components/QuantQuestionsEditor";
 import { QuantResults } from "@/components/QuantResults";
-import { PublicJoinToggle } from "@/components/PublicJoinToggle";
+import { AgentImagesEditor } from "@/components/AgentImagesEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +20,12 @@ export default async function AgentDetailPage({
 
   const agent = await db.interviewAgent.findUnique({
     where: { id },
-    include: { quantQuestions: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      quantQuestions: { orderBy: { sortOrder: "asc" } },
+      images: { orderBy: { sortOrder: "asc" } },
+    },
   });
   if (!agent || agent.engagementId !== engagement.id) notFound();
-
-  const rounds = await db.interviewRound.findMany({
-    where: { engagementId: engagement.id },
-    orderBy: { createdAt: "desc" },
-  });
 
   const resultsByQuestion = await Promise.all(
     agent.quantQuestions.map(async (q) => {
@@ -44,17 +40,6 @@ export default async function AgentDetailPage({
       };
     }),
   );
-
-  let qrDataUrl: string | null = null;
-  let joinUrl = "";
-  if (agent.publicJoinEnabled && agent.publicJoinSlug) {
-    const h = await headers();
-    const host = h.get("host") ?? "localhost:3000";
-    const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-    const origin = h.get("origin") ?? `${proto}://${host}`;
-    joinUrl = `${origin}/respond/join/${agent.publicJoinSlug}`;
-    qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 200 });
-  }
 
   return (
     <div>
@@ -72,8 +57,18 @@ export default async function AgentDetailPage({
           formalityLevel: agent.formalityLevel,
           questionLengthLevel: agent.questionLengthLevel,
         }}
+        images={agent.images.map((img) => ({ label: img.label }))}
         extraSections={
           <>
+            <Panel title="Billeder">
+              <p className="mb-4 text-[12.5px] leading-relaxed text-(--color-faint)">
+                Læg billeder ind agenten kan vise respondenten undervejs — fx
+                en mockup respondenten skal vurdere. Agenten afgør selv
+                hvornår i samtalen det er relevant.
+              </p>
+              <AgentImagesEditor agentId={agent.id} images={agent.images} />
+            </Panel>
+
             <Panel title="Kvant-spørgsmål">
               <p className="mb-4 text-[12.5px] leading-relaxed text-(--color-faint)">
                 Faste spørgsmål agenten stiller alle respondenter, ud over de
@@ -92,22 +87,6 @@ export default async function AgentDetailPage({
                 </div>
               </Panel>
             )}
-
-            <Panel title="Offentlig invitation">
-              <p className="mb-4 text-[12.5px] leading-relaxed text-(--color-faint)">
-                Del et link eller en QR-kode i stedet for at oprette
-                respondenter manuelt — alle der bruger det starter deres eget
-                interview med denne agent.
-              </p>
-              <PublicJoinToggle
-                agentId={agent.id}
-                enabled={agent.publicJoinEnabled}
-                roundId={agent.publicJoinRoundId}
-                rounds={rounds}
-                joinUrl={joinUrl}
-                qrDataUrl={qrDataUrl}
-              />
-            </Panel>
           </>
         }
       />

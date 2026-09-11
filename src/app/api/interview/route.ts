@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { generateJson, hasApiKey } from "@/lib/claude";
+import { generateJson, hasApiKey, hasClaudeCli } from "@/lib/claude";
 import {
   AGENT_TURN_SCHEMA,
   buildInterviewSystemPrompt,
@@ -20,17 +20,21 @@ export async function POST(req: Request) {
 
   // Et rigtigt, afsendt interview har et interviewId; konsulentens "prøv
   // agenten selv"-preview har i stedet et rent agentId og gemmer intet.
+  const agentInclude = {
+    quantQuestions: { orderBy: { sortOrder: "asc" as const } },
+    images: { orderBy: { sortOrder: "asc" as const } },
+  };
   const agent = interviewId
     ? (
         await db.interview.findUnique({
           where: { id: interviewId },
-          include: { interviewAgent: { include: { quantQuestions: { orderBy: { sortOrder: "asc" } } } } },
+          include: { interviewAgent: { include: agentInclude } },
         })
       )?.interviewAgent
     : agentId
       ? await db.interviewAgent.findUnique({
           where: { id: agentId },
-          include: { quantQuestions: { orderBy: { sortOrder: "asc" } } },
+          include: agentInclude,
         })
       : null;
 
@@ -46,6 +50,7 @@ export async function POST(req: Request) {
       type: q.type as "CHOICE" | "SCALE",
       options: q.options ? (JSON.parse(q.options) as string[]) : [],
     })),
+    agent.images.map((img) => ({ label: img.label })),
   );
 
   const transcript = messages.length
@@ -54,9 +59,10 @@ export async function POST(req: Request) {
         .join("\n\n")
     : "(interviewet er ikke begyndt — byd velkommen og stil dit første spørgsmål)";
 
-  // Ingen API-nøgle sat endnu — kør et fast, gratis test-script i stedet for
-  // at fejle. Slås fra af sig selv, så snart ANTHROPIC_API_KEY er sat.
-  if (!hasApiKey()) {
+  // Hverken API-nøgle eller lokal Claude CLI til rådighed — kør et fast,
+  // gratis test-script i stedet for at fejle. Slås fra af sig selv, så snart
+  // enten ANTHROPIC_API_KEY er sat eller `claude` findes på maskinen.
+  if (!hasApiKey() && !hasClaudeCli()) {
     const agentTurnIndex = messages.filter((m) => m.role === "agent").length;
     const turn = generateMockTurn({ agentTurnIndex });
     return NextResponse.json({ ...turn, mock: true });

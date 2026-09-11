@@ -9,7 +9,7 @@
 */
 
 import { db } from "./db";
-import { generateJson, hasApiKey } from "./claude";
+import { generateJson, hasApiKey, hasClaudeCli } from "./claude";
 
 export const THEME_SCHEMA = {
   type: "object",
@@ -54,8 +54,8 @@ function buildThemeAnalysisPrompt(roundName: string, notes: NoteForAnalysis[]): 
 }
 
 export async function generateThemeClusters(roundId: string): Promise<number> {
-  if (!hasApiKey()) {
-    throw new Error("Sæt ANTHROPIC_API_KEY for at generere temaer.");
+  if (!hasApiKey() && !hasClaudeCli()) {
+    throw new Error("Sæt ANTHROPIC_API_KEY, eller sørg for at Claude CLI er installeret, for at generere temaer.");
   }
 
   const round = await db.interviewRound.findUniqueOrThrow({ where: { id: roundId } });

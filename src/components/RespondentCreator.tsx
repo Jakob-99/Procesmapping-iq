@@ -10,6 +10,7 @@ export function RespondentCreator() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
 
   if (!open) {
     return (
@@ -25,10 +26,11 @@ export function RespondentCreator() {
   function submit() {
     if (!name.trim() || !email.trim()) return;
     startTransition(async () => {
-      await createRespondent(name, email, title);
+      await createRespondent(name, email, title, undefined, category);
       setName("");
       setEmail("");
       setTitle("");
+      setCategory("");
       setOpen(false);
     });
   }
@@ -53,6 +55,12 @@ export function RespondentCreator() {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Titel (valgfrit)"
+        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      />
+      <input
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        placeholder="Forretningsområde (valgfrit)"
         className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
       />
       <div className="flex gap-2 pt-0.5">

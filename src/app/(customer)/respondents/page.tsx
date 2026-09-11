@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
-import { Empty } from "@/components/ui";
 import { RespondentCreator } from "@/components/RespondentCreator";
 import { RespondentCsvImport } from "@/components/RespondentCsvImport";
-import { RespondentRow } from "@/components/RespondentRow";
+import { RespondentCsvExport } from "@/components/RespondentCsvExport";
+import { RespondentList } from "@/components/RespondentList";
 
 export const dynamic = "force-dynamic";
 
@@ -28,16 +28,9 @@ export default async function RespondentsPage() {
         <div className="flex flex-wrap items-start">
           <RespondentCreator />
           <RespondentCsvImport />
+          <RespondentCsvExport respondents={respondents} />
         </div>
-        {respondents.length === 0 ? (
-          <Empty>Ingen respondenter endnu.</Empty>
-        ) : (
-          <div className="divide-y divide-(--color-line-soft)">
-            {respondents.map((r) => (
-              <RespondentRow key={r.id} id={r.id} name={r.name} email={r.email} title={r.title} />
-            ))}
-          </div>
-        )}
+        <RespondentList respondents={respondents} />
       </div>
     </div>
   );

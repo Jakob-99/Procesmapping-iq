@@ -16,7 +16,11 @@ export default async function RespondentSessionPage({
 
   const interview = await db.interview.findUnique({
     where: { id: interviewId },
-    include: { interviewAgent: true },
+    include: {
+      interviewAgent: { include: { images: { orderBy: { sortOrder: "asc" } } } },
+      messages: { orderBy: { createdAt: "asc" } },
+      notes: { orderBy: { createdAt: "asc" } },
+    },
   });
   if (!interview) notFound();
 
@@ -28,6 +32,14 @@ export default async function RespondentSessionPage({
       interviewId={interview.id}
       agentName={interview.interviewAgent.name}
       respondentName={respondent.name}
+      agentImages={interview.interviewAgent.images.map((img) => ({ label: img.label, data: img.data }))}
+      initialTurns={interview.messages.map((m) => ({
+        role: m.role === "agent" ? "agent" : "user",
+        content: m.content,
+        showImage: m.imageLabel,
+      }))}
+      initialNotes={interview.notes.map((n) => ({ category: n.category, content: n.content }))}
+      initialDone={interview.status === "COMPLETED"}
     />
   );
 }

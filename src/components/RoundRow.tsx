@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { renameRound, deleteRound } from "@/app/(customer)/rounds/actions";
 import { ClayButton } from "./ui";
@@ -57,7 +58,12 @@ export function RoundRow({
   return (
     <div className={`group flex items-start justify-between gap-3 py-4 first:pt-0 ${pending ? "opacity-40" : ""}`}>
       <div className="min-w-0">
-        <div className="text-[14px] font-semibold">{name}</div>
+        <Link
+          href={`/rounds/${id}`}
+          className="text-[14px] font-semibold hover:text-(--color-clay) hover:underline"
+        >
+          {name}
+        </Link>
         <div className="mt-0.5 text-[12.5px] text-(--color-muted)">{interviewCount} interviews</div>
       </div>
       <div className="flex shrink-0 items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100">

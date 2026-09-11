@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { PageHeader } from "@/components/PageHeader";
+import { SetBreadcrumb } from "@/components/BreadcrumbContext";
 import { Panel, Empty, Badge } from "@/components/ui";
 import { InsightsTabs } from "@/components/InsightsTabs";
 import { QuoteDeleteButton } from "@/components/QuoteDeleteButton";
@@ -28,8 +29,15 @@ export default async function InsightsQuotesPage({
 
   return (
     <div>
+      <SetBreadcrumb
+        items={[
+          { label: "Undersøgelser", href: "/interviews" },
+          { label: round.name, href: `/rounds/${roundId}` },
+          { label: "Interviews" },
+        ]}
+      />
       <PageHeader
-        title="Indsigter"
+        title="Interviews"
         lead="Tematisk analyse, citater og institutionel hukommelse for denne interview-runde."
       />
 

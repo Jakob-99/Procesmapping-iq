@@ -5,8 +5,10 @@ import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { assertInterviewRoundOwnership } from "@/lib/ownership";
 
-// Runder er en funktion under /interviews, ikke sin egen side — se
-// RoundCreator/RoundRow i src/app/(customer)/interviews/page.tsx.
+// Runder ("undersøgelser") listes under /interviews, og har hver sin egen
+// side under /rounds/[id] hvor man sender interviews og styrer offentlig
+// invitation for netop den runde — se RoundCreator/RoundRow (listen) og
+// rounds/[id]/page.tsx (rundens egen side).
 
 export async function createRound(name: string) {
   if (!name.trim()) return null;
@@ -23,6 +25,7 @@ export async function renameRound(id: string, name: string) {
   if (!name.trim()) return;
   await db.interviewRound.update({ where: { id }, data: { name: name.trim() } });
   revalidatePath("/interviews");
+  revalidatePath(`/rounds/${id}`);
 }
 
 export async function deleteRound(id: string) {

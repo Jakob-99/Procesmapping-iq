@@ -60,12 +60,6 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M4 5.5h16v11H9.5L5 20v-3.5H4z" />
     </Icon>
   ),
-  indsigter: (
-    <Icon>
-      <circle cx="10.5" cy="10.5" r="6.5" />
-      <path d="M15.3 15.3 20 20" />
-    </Icon>
-  ),
   kontrolpanel: (
     <Icon>
       <circle cx="12" cy="12" r="8.5" />
@@ -78,18 +72,20 @@ const ITEMS = [
   { href: "/", key: "oversigt", label: "Oversigt" },
   { href: "/respondents", key: "respondenter", label: "Respondenter" },
   { href: "/agents", key: "agenter", label: "Interview agenter" },
-  { href: "/interviews", key: "interviews", label: "Interviews" },
-  { href: "/insights", key: "indsigter", label: "Indsigter" },
+  { href: "/interviews", key: "interviews", label: "Undersøgelser" },
 ];
 
 type OrgUser = { id: string; name: string; email: string; role: string };
+type ApiKeyRow = { id: string; name: string; createdAt: string; lastUsedAt: string | null };
 
 export function Nav({
   organization,
   users,
+  apiKeys,
 }: {
   organization: { id: string; name: string } | null;
   users: OrgUser[];
+  apiKeys: ApiKeyRow[];
 }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
@@ -149,6 +145,7 @@ export function Nav({
             onClose={() => setPanelOpen(false)}
             organization={organization}
             users={users}
+            apiKeys={apiKeys}
           />
         )}
       </aside>

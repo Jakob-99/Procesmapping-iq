@@ -35,13 +35,14 @@ export type AgentTurn = {
   say: string;
   form: { title: string; fields: FormField[] } | null;
   keynote: { category: string; content: string } | null;
+  showImage: string | null;
   done: boolean;
 };
 
 export const AGENT_TURN_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["say", "form", "keynote", "done"],
+  required: ["say", "form", "keynote", "showImage", "done"],
   properties: {
     say: {
       type: "string",
@@ -93,6 +94,11 @@ export const AGENT_TURN_SCHEMA = {
         content: { type: "string" },
       },
     },
+    showImage: {
+      type: ["string", "null"],
+      description:
+        "Præcis labelen på det billede der skal vises lige nu, hvis et af de tilgængelige billeder er relevant for den tur. Ellers null. Kan sættes flere ture i træk hvis samme billede stadig er relevant.",
+    },
     done: {
       type: "boolean",
       description: "Sandt når interviewet er nået til vejs ende.",
@@ -135,6 +141,8 @@ function levelLabel(labels: string[], level: number): string {
   return labels[Math.min(Math.max(level, 1), 5) - 1];
 }
 
+export type AgentImageInput = { label: string };
+
 export function buildInterviewSystemPrompt(
   agent: {
     name: string;
@@ -146,7 +154,15 @@ export function buildInterviewSystemPrompt(
     questionLengthLevel: number;
   },
   quantQuestions: QuantQuestionInput[] = [],
+  images: AgentImageInput[] = [],
 ): string {
+  const imageBlock =
+    images.length === 0
+      ? ""
+      : `\nBilleder du kan vise respondenten undervejs, når det er relevant for det du spørger om (referér med PRÆCIS dette label i "showImage" — brug ALDRIG et label der ikke står her):\n${images
+          .map((img) => `- "${img.label}"`)
+          .join("\n")}\nDu vurderer selv hvornår hvert billede er relevant — måske fra første tur, måske først senere. Sæt showImage til null når intet af dem er relevant lige nu.\n`;
+
   const quantBlock =
     quantQuestions.length === 0
       ? ""
@@ -164,7 +180,7 @@ export function buildInterviewSystemPrompt(
 Formålet med interviewet er:
 ${agent.purpose}
 
-${agent.prequalification ? `Prækvalificering — dette skal være opfyldt for at respondenten er relevant:\n${agent.prequalification}\n` : ""}${agent.investigate ? `Hvad du konkret skal undersøge:\n${agent.investigate}\n` : ""}${quantBlock}
+${agent.prequalification ? `Afklaring inden interviewet går i gang — dette skal du have styr på tidligt i samtalen, som en naturlig del af opstarten:\n${agent.prequalification}\nDette er IKKE en spærring. Du skal ikke afvise eller afslutte interviewet, uanset hvad respondenten svarer — du skal bare kende svaret, så du kan stille resten af spørgsmålene i den rigtige kontekst.\n` : ""}${agent.investigate ? `Hvad du konkret skal undersøge:\n${agent.investigate}\n` : ""}${quantBlock}${imageBlock}
 Din stil, styret af tre indstillinger:
 - ${levelLabel(FOLLOW_UP_LABELS, agent.followUpLevel)}
 - ${levelLabel(FORMALITY_LABELS, agent.formalityLevel)}
@@ -172,6 +188,7 @@ Din stil, styret af tre indstillinger:
 
 Sådan spørger du i øvrigt:
 - Én ting ad gangen. Aldrig to spørgsmål i samme tur.
+- Er der afklaring du skal have styr på (se ovenfor), så gør det i de første par ture, inden du går videre.
 - Start bredt, og bor derefter ned i det formålet beder dig afdække.
 - Spørg til det faktiske og konkrete, ikke det ideelle. Bed om eksempler.
 - Skriv på dansk, i du-form, som en nysgerrig samtalepartner.

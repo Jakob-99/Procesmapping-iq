@@ -9,15 +9,16 @@ export function InsightsTabs({ roundId, roundName }: { roundId: string; roundNam
     { href: `/insights/${roundId}`, label: "Temaer" },
     { href: `/insights/${roundId}/quotes`, label: "Citater" },
     { href: `/insights/${roundId}/ask`, label: "Spørg på tværs" },
+    { href: `/insights/${roundId}/data`, label: "Data" },
   ];
 
   return (
     <div className="mb-6">
       <Link
-        href="/insights"
+        href={`/rounds/${roundId}`}
         className="mb-2 inline-block text-[12px] text-(--color-faint) hover:text-(--color-clay)"
       >
-        ← Alle runder
+        ← Tilbage til undersøgelsen
       </Link>
       <div className="eyebrow mb-3 text-(--color-clay)">{roundName}</div>
       <div className="flex gap-1 border-b border-(--color-line)">

@@ -137,6 +137,23 @@ model Engagement {
   consultantAccess ConsultantEngagementAccess[]
   themeClusters    ThemeCluster[]
   quotes           Quote[]
+  apiKeys          ApiKey[]
+}
+
+// En langtidsholdbar service-nøgle der lader en ekstern klient (fx en
+// MCP-server en Claude-agent taler med, se app/api/mcp/route.ts) læse ét
+// engagements data uden en browser-session. Kun keyHash gemmes — selve
+// nøglen vises én gang ved oprettelse (se createApiKey i admin/actions.ts)
+// og kan ikke genskabes bagefter, kun tilbagekaldes.
+model ApiKey {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  keyHash      String     @unique
+  createdAt    DateTime   @default(now())
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
 }
 
 // ------------------------------------------------------------- Interview-platform
@@ -151,6 +168,7 @@ model Respondent {
   name         String
   email        String
   title        String?
+  category     String?
   notes        String?
   createdAt    DateTime   @default(now())
 
@@ -203,6 +221,22 @@ model InterviewAgent {
 
   interviews     Interview[]
   quantQuestions QuantQuestion[]
+  images         AgentImage[]
+}
+
+// Et billede konsulenten lægger ind ved agentens opsætning (fx en emballage-
+// mockup, et koncept-oplæg) — agenten kan referere det ved "label" i sin
+// prompt og selv vurdere HVORNÅR under interviewet det er relevant at vise
+// det (se showImage i AGENT_TURN_SCHEMA, lib/interview.ts), ikke fast
+// placeret et bestemt sted i samtalen.
+model AgentImage {
+  id               String         @id @default(cuid())
+  interviewAgentId String
+  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
+  label            String // kort, unikt reference-navn agenten bruger til at pege på billedet
+  data             String // data-URI (base64) — små nok billeder til at ligge i SQLite uden filhåndtering
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
 }
 
 // En navngivet "samling" af afsendte interviews — oprettes FØRST, og vælges
@@ -285,6 +319,7 @@ model InterviewMessage {
   interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   role        String // agent | user
   content     String
+  imageLabel  String? // sat når denne agent-tur viste et AgentImage — bruges til at genskabe billedhistorikken ved genoptagelse
   createdAt   DateTime  @default(now())
 
   quotes Quote[]

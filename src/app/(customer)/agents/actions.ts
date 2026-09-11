@@ -7,6 +7,7 @@ import {
   assertInterviewAgentOwnership,
   assertInterviewRoundOwnership,
   assertQuantQuestionOwnership,
+  assertAgentImageOwnership,
 } from "@/lib/ownership";
 import { randomUUID } from "crypto";
 
@@ -68,6 +69,38 @@ export async function deleteAgent(id: string) {
   revalidatePath("/agents");
 }
 
+// Kloner en agent (inkl. dens quant-spørgsmål) som udgangspunkt for en ny —
+// hurtigere end at bygge et interview op fra en blank editor hver gang.
+export async function duplicateAgent(id: string) {
+  await assertInterviewAgentOwnership(id);
+  const source = await db.interviewAgent.findUniqueOrThrow({
+    where: { id },
+    include: { quantQuestions: { orderBy: { sortOrder: "asc" } } },
+  });
+  const copy = await db.interviewAgent.create({
+    data: {
+      engagementId: source.engagementId,
+      name: `${source.name} (kopi)`,
+      purpose: source.purpose,
+      prequalification: source.prequalification,
+      investigate: source.investigate,
+      followUpLevel: source.followUpLevel,
+      formalityLevel: source.formalityLevel,
+      questionLengthLevel: source.questionLengthLevel,
+      quantQuestions: {
+        create: source.quantQuestions.map((q) => ({
+          prompt: q.prompt,
+          type: q.type,
+          options: q.options,
+          sortOrder: q.sortOrder,
+        })),
+      },
+    },
+  });
+  revalidatePath("/agents");
+  return copy;
+}
+
 export async function createQuantQuestion(
   agentId: string,
   prompt: string,
@@ -96,6 +129,26 @@ export async function deleteQuantQuestion(id: string) {
   if (question) revalidatePath(`/agents/${question.interviewAgentId}`);
 }
 
+// Billeder agenten kan vælge at vise respondenten undervejs — se showImage i
+// AGENT_TURN_SCHEMA (lib/interview.ts). Labelen skal være unik pr. agent, så
+// modellen entydigt kan pege på det rigtige billede.
+export async function createAgentImage(agentId: string, label: string, data: string) {
+  await assertInterviewAgentOwnership(agentId);
+  if (!label.trim() || !data) return;
+  const count = await db.agentImage.count({ where: { interviewAgentId: agentId } });
+  await db.agentImage.create({
+    data: { interviewAgentId: agentId, label: label.trim(), data, sortOrder: count },
+  });
+  revalidatePath(`/agents/${agentId}`);
+}
+
+export async function deleteAgentImage(id: string) {
+  const image = await db.agentImage.findUnique({ where: { id }, select: { interviewAgentId: true } });
+  await assertAgentImageOwnership(id);
+  await db.agentImage.delete({ where: { id } });
+  if (image) revalidatePath(`/agents/${image.interviewAgentId}`);
+}
+
 // Genererer (eller genbruger) et offentligt join-slug og tænder/slukker det.
 // Skal have en runde at samle de selv-oprettede interviews i, ligesom en
 // almindelig afsendelse — roundId er derfor krævet når enabled er sandt.
@@ -115,4 +168,8 @@ export async function setPublicJoin(agentId: string, enabled: boolean, roundId?:
     },
   });
   revalidatePath(`/agents/${agentId}`);
+  // Offentlig invitation styres fra rundens egen side — genindlæs den runde
+  // det lige blev slået til/fra for (ved "fra" kender vi kun den GAMLE runde).
+  if (roundId) revalidatePath(`/rounds/${roundId}`);
+  if (agent.publicJoinRoundId) revalidatePath(`/rounds/${agent.publicJoinRoundId}`);
 }

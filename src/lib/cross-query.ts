@@ -7,7 +7,7 @@
 */
 
 import { db } from "./db";
-import { generateJson, hasApiKey } from "./claude";
+import { generateJson, hasApiKey, hasClaudeCli } from "./claude";
 
 export const CROSS_QUERY_SCHEMA = {
   type: "object",
@@ -40,8 +40,8 @@ export async function answerCrossQuery(
   roundId: string,
   question: string,
 ): Promise<CrossQueryResult> {
-  if (!hasApiKey()) {
-    throw new Error("Sæt ANTHROPIC_API_KEY for at spørge på tværs af interviews.");
+  if (!hasApiKey() && !hasClaudeCli()) {
+    throw new Error("Sæt ANTHROPIC_API_KEY, eller sørg for at Claude CLI er installeret, for at spørge på tværs af interviews.");
   }
   if (!question.trim()) {
     throw new Error("Skriv et spørgsmål.");

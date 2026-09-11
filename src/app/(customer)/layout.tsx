@@ -29,6 +29,23 @@ export default async function CustomerLayout({
       })
     : null;
 
+  // MCP-nøgler hører til engagementet, ikke organisationen direkte (se
+  // ApiKey i schema.prisma) — samme "første engagement for organisationen"
+  // som requireEngagement() bruger (lib/engagement.ts).
+  const engagement = organization
+    ? await db.engagement.findFirst({
+        where: { organizationId: organization.id },
+        orderBy: { createdAt: "asc" },
+      })
+    : null;
+  const apiKeys = engagement
+    ? await db.apiKey.findMany({
+        where: { engagementId: engagement.id, revokedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, createdAt: true, lastUsedAt: true },
+      })
+    : [];
+
   if (!sessionUser) {
     // Ingen session — kun /login lander her (alle andre sider redirecter
     // dertil via requireEngagement/requireSessionUser). Fuldskærms, uden
@@ -65,6 +82,12 @@ export default async function CustomerLayout({
                 }))
               : []
           }
+          apiKeys={apiKeys.map((k) => ({
+            id: k.id,
+            name: k.name,
+            createdAt: k.createdAt.toISOString(),
+            lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+          }))}
         />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>

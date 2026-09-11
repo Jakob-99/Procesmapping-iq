@@ -20,7 +20,10 @@ export default async function AgentPreviewPage({
   const { id } = await params;
   const engagement = await requireEngagement();
 
-  const agent = await db.interviewAgent.findUnique({ where: { id } });
+  const agent = await db.interviewAgent.findUnique({
+    where: { id },
+    include: { images: { orderBy: { sortOrder: "asc" } } },
+  });
   if (!agent || agent.engagementId !== engagement.id) notFound();
 
   return (
@@ -43,7 +46,13 @@ export default async function AgentPreviewPage({
         }
       />
 
-      <InterviewSession preview agentId={agent.id} agentName={agent.name} respondentName="Dig" />
+      <InterviewSession
+        preview
+        agentId={agent.id}
+        agentName={agent.name}
+        respondentName="Dig"
+        agentImages={agent.images.map((img) => ({ label: img.label, data: img.data }))}
+      />
     </div>
   );
 }

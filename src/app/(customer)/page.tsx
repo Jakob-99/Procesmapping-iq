@@ -61,7 +61,7 @@ export default async function OverviewPage() {
         ) : (
           <div className="space-y-2.5">
             {recent.map((iv) => (
-              <Link key={iv.id} href={`/interviews/${iv.id}`}>
+              <Link key={iv.id} href={`/interviews/${iv.id}`} className="block">
                 <Panel className="lift flex items-center justify-between gap-4 transition-colors hover:border-(--color-clay-line)">
                   <div className="min-w-0">
                     <div className="text-[14px] font-medium">{iv.interviewAgent.name}</div>
