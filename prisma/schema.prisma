@@ -168,7 +168,7 @@ model Respondent {
   name         String
   email        String
   title        String?
-  category     String?
+  categories   String? // JSON array af forretningsområder — flere pr. respondent, se lib/categories.ts
   notes        String?
   createdAt    DateTime   @default(now())
 

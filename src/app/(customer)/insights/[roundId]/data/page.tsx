@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
+import { parseCategories } from "@/lib/categories";
 import { PageHeader } from "@/components/PageHeader";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
 import { Panel, Empty, Badge, Stat } from "@/components/ui";
@@ -43,8 +44,9 @@ export default async function InsightsDataPage({
   const openCount = interviews.length - completedCount;
   const categoryCounts = new Map<string, number>();
   for (const iv of interviews) {
-    const cat = iv.respondent.category;
-    if (cat) categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+    for (const cat of parseCategories(iv.respondent.categories)) {
+      categoryCounts.set(cat, (categoryCounts.get(cat) ?? 0) + 1);
+    }
   }
 
   const downloadData = interviews.map((iv) => ({
@@ -108,8 +110,8 @@ export default async function InsightsDataPage({
                   <div className="text-[14px] font-medium">{iv.interviewAgent.name}</div>
                   <div className="mt-0.5 text-[12.5px] text-(--color-muted)">
                     {iv.respondent.name}
-                    {iv.respondent.category && (
-                      <span className="text-(--color-faint)"> · {iv.respondent.category}</span>
+                    {parseCategories(iv.respondent.categories).length > 0 && (
+                      <span className="text-(--color-faint)"> · {parseCategories(iv.respondent.categories).join(", ")}</span>
                     )}
                     <span className="text-(--color-faint)"> · {iv.startedAt.toLocaleDateString("da-DK")}</span>
                   </div>

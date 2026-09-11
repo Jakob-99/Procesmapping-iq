@@ -4,18 +4,21 @@ import { useRef, useState, useTransition } from "react";
 import { importRespondents } from "@/app/(customer)/respondents/actions";
 import { ClayButton } from "./ui";
 
-type Row = { name: string; email: string; title?: string; category?: string };
+type Row = { name: string; email: string; title?: string; categories?: string[] };
 
-// Simpelt, håndrullet CSV-format uden citationstegn — "navn,mail,titel,forretningsområde",
-// én respondent pr. linje, titel/forretningsområde valgfri, valgfri header-linje der springes over.
+// Simpelt, håndrullet CSV-format uden citationstegn —
+// "navn,mail,titel,forretningsområder", én respondent pr. linje,
+// titel/forretningsområder valgfri, valgfri header-linje der springes
+// over. Flere forretningsområder i samme kolonne adskilles med ";".
 function parseCsv(text: string): Row[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const rows: Row[] = [];
   for (const line of lines) {
-    const [name, email, title, category] = line.split(",").map((c) => c.trim());
+    const [name, email, title, categoryCell] = line.split(",").map((c) => c.trim());
     if (!name || !email) continue;
     if (name.toLowerCase() === "navn" && email.toLowerCase() === "mail") continue; // header
-    rows.push({ name, email, title: title || undefined, category: category || undefined });
+    const categories = categoryCell ? categoryCell.split(";").map((c) => c.trim()).filter(Boolean) : undefined;
+    rows.push({ name, email, title: title || undefined, categories });
   }
   return rows;
 }
@@ -61,9 +64,9 @@ export function RespondentCsvImport() {
     <div className="mb-4 space-y-2 rounded-xl border border-(--color-line-soft) bg-(--color-raised) p-3.5">
       <div className="eyebrow mb-1">Importér respondenter fra CSV</div>
       <p className="text-[11.5px] leading-relaxed text-(--color-faint)">
-        Én pr. linje: <code>navn,mail,titel,forretningsområde</code> (titel og
-        forretningsområde valgfri). Findes mailen allerede, opdateres
-        respondenten i stedet for at duplikeres.
+        Én pr. linje: <code>navn,mail,titel,forretningsområder</code> (titel og
+        forretningsområder valgfri, flere adskilt med ";"). Findes mailen
+        allerede, opdateres respondenten i stedet for at duplikeres.
       </p>
       <input
         ref={inputRef}

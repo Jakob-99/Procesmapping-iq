@@ -4,16 +4,18 @@ type Respondent = {
   name: string;
   email: string;
   title: string | null;
-  category: string | null;
+  categories: string[];
 };
 
 // Modstykket til RespondentCsvImport — samme kolonneformat, så en eksport
-// kan importeres direkte igen (fx til en anden kunde).
+// kan importeres direkte igen (fx til en anden kunde). Flere
+// forretningsområder adskilles med ";" inden i kolonnen, da "," allerede
+// er kolonneseparatoren i dette håndrullede CSV-format.
 function toCsv(respondents: Respondent[]): string {
   const rows = respondents.map((r) =>
-    [r.name, r.email, r.title ?? "", r.category ?? ""].map((v) => v.replaceAll(",", " ")).join(","),
+    [r.name, r.email, r.title ?? "", r.categories.join(";")].map((v) => v.replaceAll(",", " ")).join(","),
   );
-  return ["navn,mail,titel,forretningsområde", ...rows].join("\n");
+  return ["navn,mail,titel,forretningsområder", ...rows].join("\n");
 }
 
 export function RespondentCsvExport({ respondents }: { respondents: Respondent[] }) {

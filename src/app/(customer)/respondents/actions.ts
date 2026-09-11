@@ -4,13 +4,14 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
 import { assertRespondentOwnership } from "@/lib/ownership";
+import { serializeCategories } from "@/lib/categories";
 
 export async function createRespondent(
   name: string,
   email: string,
   title?: string,
   notes?: string,
-  category?: string,
+  categories?: string[],
 ) {
   if (!name.trim() || !email.trim()) return null;
   const engagement = await requireEngagement();
@@ -21,7 +22,7 @@ export async function createRespondent(
       email: email.trim(),
       title: title?.trim() || null,
       notes: notes?.trim() || null,
-      category: category?.trim() || null,
+      categories: serializeCategories(categories ?? []),
     },
   });
   revalidatePath("/respondents");
@@ -34,7 +35,7 @@ export async function updateRespondent(
   email: string,
   title?: string,
   notes?: string,
-  category?: string,
+  categories?: string[],
 ) {
   await assertRespondentOwnership(id);
   if (!name.trim() || !email.trim()) return;
@@ -45,7 +46,7 @@ export async function updateRespondent(
       email: email.trim(),
       title: title?.trim() || null,
       notes: notes?.trim() || null,
-      category: category?.trim() || null,
+      categories: serializeCategories(categories ?? []),
     },
   });
   revalidatePath("/respondents");
@@ -58,7 +59,7 @@ export async function deleteRespondent(id: string) {
 }
 
 export async function importRespondents(
-  rows: { name: string; email: string; title?: string; category?: string }[],
+  rows: { name: string; email: string; title?: string; categories?: string[] }[],
 ): Promise<{ imported: number }> {
   const engagement = await requireEngagement();
   const valid = rows.filter((r) => r.name.trim() && r.email.trim());
@@ -66,13 +67,13 @@ export async function importRespondents(
     valid.map((r) =>
       db.respondent.upsert({
         where: { engagementId_email: { engagementId: engagement.id, email: r.email.trim() } },
-        update: { name: r.name.trim(), title: r.title?.trim() || null, category: r.category?.trim() || null },
+        update: { name: r.name.trim(), title: r.title?.trim() || null, categories: serializeCategories(r.categories ?? []) },
         create: {
           engagementId: engagement.id,
           name: r.name.trim(),
           email: r.email.trim(),
           title: r.title?.trim() || null,
-          category: r.category?.trim() || null,
+          categories: serializeCategories(r.categories ?? []),
         },
       }),
     ),

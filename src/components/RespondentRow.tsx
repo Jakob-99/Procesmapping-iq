@@ -4,26 +4,29 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { updateRespondent, deleteRespondent } from "@/app/(customer)/respondents/actions";
 import { ClayButton, Badge } from "./ui";
+import { CategoryPicker } from "./CategoryPicker";
 
 export function RespondentRow({
   id,
   name,
   email,
   title,
-  category,
+  categories,
+  existingCategories,
 }: {
   id: string;
   name: string;
   email: string;
   title: string | null;
-  category: string | null;
+  categories: string[];
+  existingCategories: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [nameVal, setNameVal] = useState(name);
   const [emailVal, setEmailVal] = useState(email);
   const [titleVal, setTitleVal] = useState(title ?? "");
-  const [categoryVal, setCategoryVal] = useState(category ?? "");
+  const [categoriesVal, setCategoriesVal] = useState<string[]>(categories);
 
   function remove() {
     if (!confirm(`Slet respondenten "${name}"?`)) return;
@@ -33,7 +36,7 @@ export function RespondentRow({
   function save() {
     if (!nameVal.trim() || !emailVal.trim()) return;
     startTransition(async () => {
-      await updateRespondent(id, nameVal, emailVal, titleVal, undefined, categoryVal);
+      await updateRespondent(id, nameVal, emailVal, titleVal, undefined, categoriesVal);
       setEditing(false);
     });
   }
@@ -58,11 +61,11 @@ export function RespondentRow({
           placeholder="Titel"
           className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[13px] outline-none focus:border-(--color-clay)"
         />
-        <input
-          value={categoryVal}
-          onChange={(e) => setCategoryVal(e.target.value)}
-          placeholder="Forretningsområde"
-          className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[13px] outline-none focus:border-(--color-clay)"
+        <CategoryPicker
+          value={categoriesVal}
+          onChange={setCategoriesVal}
+          options={existingCategories}
+          placeholder="Forretningsområde(r)"
         />
         <div className="flex gap-2 pt-0.5">
           <ClayButton onClick={save} disabled={pending} className="!py-1.5 !text-[12.5px]">
@@ -82,11 +85,13 @@ export function RespondentRow({
   return (
     <div className={`group flex items-start justify-between gap-3 py-4 first:pt-0 ${pending ? "opacity-40" : ""}`}>
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={`/respondents/${id}`} className="text-[14px] font-semibold hover:text-(--color-clay) hover:underline">
             {name}
           </Link>
-          {category && <Badge tone="muted">{category}</Badge>}
+          {categories.map((c) => (
+            <Badge key={c} tone="muted">{c}</Badge>
+          ))}
         </div>
         <div className="mt-0.5 text-[12.5px] text-(--color-muted)">
           {email}

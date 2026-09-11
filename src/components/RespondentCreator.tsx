@@ -3,14 +3,15 @@
 import { useState, useTransition } from "react";
 import { createRespondent } from "@/app/(customer)/respondents/actions";
 import { ClayButton } from "./ui";
+import { CategoryPicker } from "./CategoryPicker";
 
-export function RespondentCreator() {
+export function RespondentCreator({ existingCategories }: { existingCategories: string[] }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
 
   if (!open) {
     return (
@@ -26,11 +27,11 @@ export function RespondentCreator() {
   function submit() {
     if (!name.trim() || !email.trim()) return;
     startTransition(async () => {
-      await createRespondent(name, email, title, undefined, category);
+      await createRespondent(name, email, title, undefined, categories);
       setName("");
       setEmail("");
       setTitle("");
-      setCategory("");
+      setCategories([]);
       setOpen(false);
     });
   }
@@ -57,11 +58,11 @@ export function RespondentCreator() {
         placeholder="Titel (valgfrit)"
         className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
       />
-      <input
-        value={category}
-        onChange={(e) => setCategory(e.target.value)}
-        placeholder="Forretningsområde (valgfrit)"
-        className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2.5 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+      <CategoryPicker
+        value={categories}
+        onChange={setCategories}
+        options={existingCategories}
+        placeholder="Forretningsområde(r) (valgfrit)"
       />
       <div className="flex gap-2 pt-0.5">
         <ClayButton onClick={submit} disabled={pending || !name.trim() || !email.trim()} className="!py-1.5 !text-[12.5px]">

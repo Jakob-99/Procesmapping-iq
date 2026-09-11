@@ -9,16 +9,22 @@ type Respondent = {
   name: string;
   email: string;
   title: string | null;
-  category: string | null;
+  categories: string[];
 };
 
-export function RespondentList({ respondents }: { respondents: Respondent[] }) {
+export function RespondentList({
+  respondents,
+  existingCategories,
+}: {
+  respondents: Respondent[];
+  existingCategories: string[];
+}) {
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
   const filtered = q
     ? respondents.filter((r) =>
-        [r.name, r.email, r.title, r.category].some((v) => v?.toLowerCase().includes(q)),
+        [r.name, r.email, r.title, ...r.categories].some((v) => v?.toLowerCase().includes(q)),
       )
     : respondents;
 
@@ -43,7 +49,8 @@ export function RespondentList({ respondents }: { respondents: Respondent[] }) {
               name={r.name}
               email={r.email}
               title={r.title}
-              category={r.category}
+              categories={r.categories}
+              existingCategories={existingCategories}
             />
           ))}
         </div>

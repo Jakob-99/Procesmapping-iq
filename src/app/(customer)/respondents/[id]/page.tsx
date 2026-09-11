@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireEngagement } from "@/lib/engagement";
+import { parseCategories } from "@/lib/categories";
 import { PageHeader } from "@/components/PageHeader";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
 import { Badge, Empty, Panel } from "@/components/ui";
@@ -31,6 +32,7 @@ export default async function RespondentDetailPage({
     },
   });
   if (!respondent || respondent.engagementId !== engagement.id) notFound();
+  const categories = parseCategories(respondent.categories);
 
   return (
     <div>
@@ -40,13 +42,15 @@ export default async function RespondentDetailPage({
       <PageHeader
         eyebrow={`${respondent.interviews.length} interviews`}
         title={respondent.name}
-        lead={[respondent.email, respondent.title, respondent.category].filter(Boolean).join(" · ")}
+        lead={[respondent.email, respondent.title].filter(Boolean).join(" · ")}
       />
 
       <div className="mx-auto max-w-2xl px-8 py-8">
-        {respondent.category && (
-          <div className="mb-5">
-            <Badge tone="muted">{respondent.category}</Badge>
+        {categories.length > 0 && (
+          <div className="mb-5 flex flex-wrap gap-1.5">
+            {categories.map((c) => (
+              <Badge key={c} tone="muted">{c}</Badge>
+            ))}
           </div>
         )}
 
