@@ -12,6 +12,8 @@ const ACTION_LABELS: Record<string, string> = {
   IMPERSONATE: "Åbnede som kunde",
   INVITE_CONSULTANT: "Tilføjede konsulent",
   REMOVE_CONSULTANT: "Fjernede konsulent",
+  CHANGE_ROLE: "Ændrede rolle",
+  PROMOTE_ADMIN: "Automatisk admin-forfremmelse",
 };
 
 export default async function AuditLogPage() {

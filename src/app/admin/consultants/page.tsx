@@ -19,6 +19,7 @@ export default async function ConsultantsPage() {
       <div className="p-8">
         <ConsultantsManager
           currentId={consultant.id}
+          currentRole={consultant.role}
           consultants={consultants.map((c) => ({
             id: c.id,
             name: c.name,

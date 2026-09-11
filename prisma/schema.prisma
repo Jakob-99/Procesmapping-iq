@@ -71,7 +71,7 @@ model ConsultantAccount {
   email     String   @unique
   name      String
   title     String?
-  role      String   @default("ADMIN") // ADMIN | CONSULTANT — rollestyring udbygges senere
+  role      String   @default("CONSULTANT") // ADMIN | CO_LEADER | CONSULTANT — se lib/consultant-roles.ts
   createdAt DateTime @default(now())
 
   loginTokens   ConsultantLoginToken[]
@@ -112,7 +112,7 @@ model AdminAuditLog {
   id           String            @id @default(cuid())
   consultantId String
   consultant   ConsultantAccount @relation(fields: [consultantId], references: [id], onDelete: Cascade)
-  action       String // CREATE_CUSTOMER | GRANT_ACCESS | REVOKE_ACCESS | IMPERSONATE | INVITE_CONSULTANT | REMOVE_CONSULTANT
+  action       String // CREATE_CUSTOMER | GRANT_ACCESS | REVOKE_ACCESS | IMPERSONATE | INVITE_CONSULTANT | REMOVE_CONSULTANT | CHANGE_ROLE | PROMOTE_ADMIN
   targetType   String? // Engagement | User | ConsultantAccount
   targetId     String?
   detail       String?
