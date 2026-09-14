@@ -1,7 +1,9 @@
 # Corner IQ
 
-Virksomhedens hjerne. Kortlægger hvad en virksomhed faktisk gør — processer, data
-og systemer — og bygger AI-forslag oven på den viden.
+AI-interview-platform. Man bygger en genbrugelig interview-agent (formål,
+prækvalificering, hvad der skal undersøges), sender den til respondenter, og
+agenten gennemfører selv samtalen — chat og faste kvant-spørgsmål på én gang —
+og trækker noter (smertepunkter, risici, muligheder) ud undervejs.
 
 ## Kør lokalt
 
@@ -20,13 +22,13 @@ $env:Path = "C:\Program Files\nodejs;" + $env:Path
 
 ## Aktivér agenten
 
-Hjernen og de kommende agent-funktioner kræver en Claude API-nøgle. Sæt den i `.env`:
+Interview-agenten kræver en Claude API-nøgle. Sæt den i `.env`:
 
 ```
 ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-Uden nøgle kører resten af appen fint — kun `/brain` siger fra.
+Uden nøgle kører resten af appen fint — kun selve interview-samtalen siger fra.
 
 ## Database
 
@@ -46,28 +48,31 @@ Next.js 15 · TypeScript · Tailwind v4 · Prisma/SQLite · Claude API (`claude-
 
 | Sti | Hvad |
 |---|---|
-| `prisma/schema.prisma` | Datamodellen — procesgrafen hele systemet hviler på |
-| `src/lib/brain.ts` | Serialiserer grafen til hjernens kontekst |
+| `prisma/schema.prisma` | Datamodellen — respondenter, interview-agenter, runder, interviews |
+| `src/lib/interview.ts` | Selve interview-motoren: agentens system-prompt, chat + kvant-skema |
 | `src/lib/claude.ts` | Claude-kald: streaming og JSON-svar |
-| `src/lib/domain.ts` | Fælles vokabular: faser, roller, håndtag, pick-score |
+| `src/app/(customer)/agents` | Opret/redigér interview-agenter, forhåndsvisning |
+| `src/app/(customer)/respondents` | Respondent-listen |
+| `src/app/(customer)/interviews` | Runder, udsendelse, transskriptioner |
+| `src/app/(respond)/respond` | Respondentens eget flow (join/login/select/session) |
 | `src/app/globals.css` | Designsproget — farver og typografi ét sted |
 
 ## Status
 
-Bygget: fundament, datamodel, overblik, procesmodel med underprocesser,
-BPMN 2.0-tegning genereret fra data, keynotes fra interviews, agent-interview
-med interaktive skemaer + forhåndsvisning, landskab, scoping, hjernen.
-
-Mangler: gemning af interviewresultater tilbage i procesgrafen, valideringsflow,
-flaskehalsanalyse, pick-matrix, roadmap, partnermatch, test cases, træning.
-De sider findes som beskrivelser af flowet.
+Pivoteret 2026-09-09 fra et procesmapping-værktøj til en ren interview-platform
+(à la conveo.ai) — al proces-/BPMN-/system-/rollemapping er fjernet. Bygget:
+interview-agenter med prompt + tonestyring + billeder + kvant-spørgsmål,
+respondenter, runde-baseret afsendelse (mail via Resend), selvbetjenings-
+join-link, transskriptions- og noteuddrag, multi-tenant login,
+konsulent-admin-panel (kunder/konsulenter/audit), MCP-adgang til
+interviewdata til analyse (`src/app/api/mcp/route.ts`).
 
 ## To detaljer værd at kende
-
-**BPMN-tegningen gemmes ikke — den tegnes.** `src/lib/bpmn.ts` bygger diagrammet
-ud fra de kortlagte skridt ved hver visning. Retter nogen et skridt, følger
-tegningen med. Der findes aldrig en tegning der er blevet gammel.
 
 **Interviewet er chat og skema på én gang.** Agenten skriver som et menneske,
 men rækker et lille skema frem, når svaret er et tal, en frekvens eller et valg —
 de spørgsmål folk går i stå på i fri tekst. Se `src/lib/interview.ts`.
+
+**Indsigter er scoped til runden, ikke agenten.** Samme interview-agent kan
+sendes ud flere gange over tid (fx "Trivsel Q1", "Trivsel Q2") uden at
+tidligere og nye svar blandes sammen.
