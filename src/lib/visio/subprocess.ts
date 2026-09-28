@@ -154,8 +154,9 @@ class Page {
       o.text || o.extraText
         ? `<Text><cp IX="0"/><pp IX="0"/>${esc(o.text ?? "")}${o.extraText ? `\n<cp IX="1"/>${esc(o.extraText.text)}` : ""}</Text>`
         : "";
+    // Navne skal være unikke på siden — Visios egen form er "Navn.ID".
     this.shapes.push(
-      `<Shape ID="${id}" Type="Shape" LineStyle="3" FillStyle="3" TextStyle="3"${o.name ? ` NameU="${esc(o.name)}" Name="${esc(o.name)}"` : ""}>${cells.join("")}<Section N="Character">${chars.join("")}</Section>${para}${geom}${text}</Shape>`,
+      `<Shape ID="${id}" Type="Shape" LineStyle="3" FillStyle="3" TextStyle="3"${o.name ? ` NameU="${esc(o.name)}.${id}" Name="${esc(o.name)}.${id}"` : ""}>${cells.join("")}<Section N="Character">${chars.join("")}</Section>${para}${geom}${text}</Shape>`,
     );
     return id;
   }
@@ -279,7 +280,7 @@ class Page {
       return `<Row T="${i ? "LineTo" : "MoveTo"}" IX="${i + 1}">${cell("X", x)}${cell("Y", y)}</Row>`;
     }).join("")}${P.length < 3 ? `<Row T="LineTo" IX="3" Del="1"/>` : ""}</Section>`;
     this.shapes.push(
-      `<Shape ID="${id}" NameU="Dynamic connector" Name="Dynamic connector" Type="Shape" Master="1">${cells.join("")}${extra}${geom}${o.label ? `<Text>${esc(o.label)}</Text>` : ""}</Shape>`,
+      `<Shape ID="${id}" NameU="Dynamic connector.${id}" Name="Dynamic connector.${id}" Type="Shape" Master="1">${cells.join("")}${extra}${geom}${o.label ? `<Text>${esc(o.label)}</Text>` : ""}</Shape>`,
     );
     return id;
   }
