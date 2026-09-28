@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createApiKey, revokeApiKey } from "@/app/actions/api-keys";
 import { ClayButton, OutlineButton, Badge } from "./ui";
 
@@ -11,6 +11,12 @@ type ApiKeyRow = {
   lastUsedAt: string | null;
 };
 
+/*
+  MCP-serveren i Kontrolpanelet: adressen på serveren, nøglerne der giver
+  adgang til den, og hvordan man forbinder en Claude-klient. En nøgle giver
+  adgang til denne kundes procesmodel — læsning af processer, diagrammer,
+  systemer, roller, data og analyse, plus at tilføje analysepunkter.
+*/
 export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -18,11 +24,35 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const endpoint = `${origin}/api/mcp`;
+  const keyText = freshKey ?? "<din-nøgle>";
+  const cliCommand = `claude mcp add --transport http corner-iq ${endpoint} --header "x-api-key: ${keyText}"`;
 
   return (
-    <section>
+    <section className="space-y-6">
+      <div>
+        <div className="eyebrow mb-2">Serveradresse</div>
+        <CopyField value={endpoint} />
+        <p className="mt-2 text-[12px] leading-relaxed text-(--color-faint)">
+          Streamable HTTP. Nøglen sendes i headeren <code className="text-(--color-text)">x-api-key</code> (eller som{" "}
+          <code className="text-(--color-text)">Authorization: Bearer</code>). Serveren skal kunne nås fra klienten —
+          lokalt kun fra denne maskine.
+        </p>
+      </div>
+
+      <div>
+        <div className="eyebrow mb-2">Forbind fra Claude Code</div>
+        <CopyField value={cliCommand} mono />
+        <p className="mt-2 text-[12px] leading-relaxed text-(--color-faint)">
+          Værktøjer: get_process_model, get_subprocess, list_systems, list_roles_and_data, list_findings og add_finding.
+        </p>
+      </div>
+
+      <div>
       <div className="mb-2 flex items-center justify-between">
-        <div className="eyebrow">MCP API-nøgler</div>
+        <div className="eyebrow">API-nøgler</div>
         {!adding && (
           <OutlineButton
             onClick={() => {
@@ -36,14 +66,15 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
         )}
       </div>
       <p className="mb-3 text-[12px] text-(--color-faint)">
-        Lader en ekstern klient (fx en Claude-agent via MCP) læse jeres interview-runder,
-        transskriptioner og indsigter — read-only, ingen adgang til at sende eller ændre noget.
+        Lader en ekstern klient (fx en Claude-agent via MCP) læse jeres procesmodel — processer, diagrammer,
+        systemer, roller, data og analyse — og tilføje analysepunkter. Den kan ikke slette eller ændre
+        diagrammerne.
       </p>
 
       {freshKey && (
         <div className="mb-3 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-3 py-2.5">
           <div className="mb-1 text-[12px] font-medium text-(--color-clay)">
-            Nøglen vises kun denne ene gang — kopier den nu:
+            Nøglen vises kun denne ene gang — kopiér den nu (den er også sat ind i kommandoen ovenfor):
           </div>
           <code className="block break-all rounded bg-(--color-surface) px-2 py-1.5 text-[12px]">{freshKey}</code>
         </div>
@@ -136,6 +167,35 @@ export function ApiKeyManager({ keys }: { keys: ApiKeyRow[] }) {
           ))}
         </div>
       )}
+      </div>
     </section>
+  );
+}
+
+function CopyField({ value, mono }: { value: string; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-stretch gap-2">
+      <code
+        className={`min-w-0 flex-1 break-all rounded-md border border-(--color-line) bg-(--color-raised) px-2.5 py-1.5 text-[12px] leading-relaxed ${
+          mono ? "font-mono" : ""
+        }`}
+      >
+        {value}
+      </code>
+      <OutlineButton
+        onClick={() => {
+          navigator.clipboard?.writeText(value).then(
+            () => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            },
+            () => {},
+          );
+        }}
+      >
+        {copied ? "Kopieret" : "Kopiér"}
+      </OutlineButton>
+    </div>
   );
 }

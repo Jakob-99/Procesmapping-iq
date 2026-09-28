@@ -14,7 +14,7 @@ export async function requireCustomerAccess(engagementId: string) {
       engagement: {
         include: {
           organization: { include: { users: { orderBy: { name: "asc" } } } },
-          _count: { select: { respondents: true, interviewAgents: true } },
+          _count: { select: { processes: true, systems: true } },
           consultantAccess: { include: { consultant: true } },
         },
       },

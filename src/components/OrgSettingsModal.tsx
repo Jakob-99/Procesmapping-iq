@@ -18,16 +18,14 @@ type ApiKeyRow = { id: string; name: string; createdAt: string; lastUsedAt: stri
 const PAGES = [
   { key: "organisation", label: "Organisation" },
   { key: "brugere", label: "Brugere" },
-  { key: "mcp", label: "MCP API-nøgler" },
+  { key: "mcp", label: "MCP-server" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
 
 /*
   Kontrolpanelet: organisationens navn, og listen af brugere — dem der kan
-  logge ind og bruge systemet. IKKE det samme som Respondenter (se
-  /respondents), som er dem interviews sendes ud til — de to begreber holdes
-  bevidst adskilt i UI'en.
+  logge ind og bruge systemet.
   Siderne vælges i en sidemenu, ligesom resten af appens navigation, i stedet
   for at ligge stablet under hinanden i én lang scroll.
 */
@@ -71,8 +69,7 @@ export function OrgSettingsModal({
         {page === "brugere" && (
           <UsersSection organizationId={organization.id} users={users} />
         )}
-        {page === "mcp" && <ApiKeyManager keys={apiKeys} />}
-      </div>
+        {page === "mcp" && <ApiKeyManager keys={apiKeys} />}      </div>
     </Modal>
   );
 }

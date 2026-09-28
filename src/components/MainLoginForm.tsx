@@ -33,13 +33,39 @@ export function MainLoginForm() {
     });
   }
 
-  function submitCode() {
+  // Findes mailen i flere virksomheder, vælger man bagefter hvilken.
+  const [choices, setChoices] = useState<{ userId: string; organization: string }[] | null>(null);
+
+  function submitCode(chosenUserId?: string) {
     if (!code.trim() || pending) return;
     setError(null);
     startTransition(async () => {
-      const res = await loginWithMainCode(code);
-      if (res?.error) setError(res.error);
+      const res = await loginWithMainCode(code, chosenUserId);
+      if (res && "choose" in res) setChoices(res.choose);
+      else if (res && "error" in res) setError(res.error);
     });
+  }
+
+  if (choices) {
+    return (
+      <div className="mx-auto max-w-xs">
+        <p className="mb-3 text-center text-[13px] text-(--color-muted)">Hvilken virksomhed vil du ind i?</p>
+        <div className="space-y-2">
+          {choices.map((c) => (
+            <button
+              key={c.userId}
+              type="button"
+              disabled={pending}
+              onClick={() => submitCode(c.userId)}
+              className="w-full rounded-lg border border-(--color-line) bg-(--color-surface) px-4 py-3 text-[14px] font-medium transition-colors hover:border-(--color-clay-line) hover:text-(--color-clay) disabled:opacity-50"
+            >
+              {c.organization}
+            </button>
+          ))}
+        </div>
+        {error && <p className="mt-2 text-center text-[12.5px] text-(--color-alert)">{error}</p>}
+      </div>
+    );
   }
 
   if (step === "email") {
@@ -88,6 +114,7 @@ export function MainLoginForm() {
         value={code}
         onChange={(e) => setCode(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && submitCode()}
+
         placeholder="6-cifret kode"
         inputMode="numeric"
         autoFocus
@@ -97,7 +124,7 @@ export function MainLoginForm() {
         <p className="mt-2 text-center text-[12.5px] text-(--color-alert)">{error}</p>
       )}
       <ClayButton
-        onClick={submitCode}
+        onClick={() => submitCode()}
         disabled={pending || !code.trim()}
         className="mt-4 w-full justify-center !py-3"
       >

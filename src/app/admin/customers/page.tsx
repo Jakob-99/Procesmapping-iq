@@ -13,7 +13,7 @@ export default async function CustomersPage() {
     where: { consultantId: consultant.id },
     include: {
       engagement: {
-        include: { organization: true, _count: { select: { respondents: true } } },
+        include: { organization: true, _count: { select: { processes: true } } },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -41,7 +41,7 @@ export default async function CustomersPage() {
                   <div className="eyebrow mb-1.5">{a.engagement.name}</div>
                   <div className="text-[15px] font-medium">{a.engagement.organization.name}</div>
                   <div className="mt-1 text-[12px] text-(--color-faint)">
-                    {a.engagement._count.respondents} respondenter
+                    {a.engagement._count.processes} processer
                   </div>
                 </Panel>
               </Link>

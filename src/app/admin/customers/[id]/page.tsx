@@ -31,8 +31,8 @@ export default async function CustomerDetailPage({
       <div className="grid gap-4 p-8 pt-0 sm:grid-cols-3">
         <Panel eyebrow="Engagement" title={engagement.name} className="sm:col-span-3" bodyClass="pt-1">
           <div className="flex gap-6 text-[12.5px] text-(--color-muted)">
-            <span>{engagement._count.respondents} respondenter</span>
-            <span>{engagement._count.interviewAgents} interview agenter</span>
+            <span>{engagement._count.processes} processer</span>
+            <span>{engagement._count.systems} systemer</span>
           </div>
         </Panel>
 

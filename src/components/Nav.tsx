@@ -40,24 +40,30 @@ const ICONS: Record<string, ReactNode> = {
       <rect x="13.5" y="13.5" width="7" height="7" rx="1.3" />
     </Icon>
   ),
-  respondenter: (
+  processer: (
     <Icon>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
-      <path d="M15.5 6.2a3 3 0 0 1 0 5.6" />
-      <path d="M17.5 19a5.2 5.2 0 0 0-3-4.7" />
+      <rect x="3.5" y="4" width="6" height="5" rx="1.2" />
+      <rect x="14.5" y="4" width="6" height="5" rx="1.2" />
+      <rect x="9" y="15" width="6" height="5" rx="1.2" />
+      <path d="M6.5 9v2.5h11V9M12 11.5V15" />
     </Icon>
   ),
-  agenter: (
+  systemer: (
     <Icon>
-      <path d="M9.5 4a2.5 2.5 0 0 0-2.5 2.5v.2A2.7 2.7 0 0 0 5 9.3v1.4a2.7 2.7 0 0 0 1 2.1v1.7A2.5 2.5 0 0 0 8.5 17H9v3" />
-      <path d="M14.5 4A2.5 2.5 0 0 1 17 6.5v.2a2.7 2.7 0 0 1 2 2.6v1.4a2.7 2.7 0 0 1-1 2.1v1.7a2.5 2.5 0 0 1-2.5 2.5H15v3" />
-      <path d="M9.5 4a2.5 2.5 0 0 1 5 0v13a2.5 2.5 0 0 1-5 0Z" />
+      <rect x="3.5" y="4.5" width="17" height="11" rx="1.5" />
+      <path d="M3.5 8h17M9 19.5h6M12 15.5v4" />
     </Icon>
   ),
-  interviews: (
+  roller: (
     <Icon>
-      <path d="M4 5.5h16v11H9.5L5 20v-3.5H4z" />
+      <circle cx="12" cy="8" r="3.4" />
+      <path d="M5 19.5a7 7 0 0 1 14 0" />
+    </Icon>
+  ),
+  data: (
+    <Icon>
+      <path d="M6 3.5h8.5l3.5 3.5v13H6z" />
+      <path d="M14.5 3.5V7H18M9 12h6M9 15.5h6" />
     </Icon>
   ),
   kontrolpanel: (
@@ -68,11 +74,23 @@ const ICONS: Record<string, ReactNode> = {
   ),
 };
 
-const ITEMS = [
-  { href: "/", key: "oversigt", label: "Oversigt" },
-  { href: "/respondents", key: "respondenter", label: "Respondenter" },
-  { href: "/agents", key: "agenter", label: "Interview agenter" },
-  { href: "/interviews", key: "interviews", label: "Undersøgelser" },
+// Oversigten for sig, derefter procesmappingen: processerne og de aktører
+// og objekter skridtene kobles til. Gruppen vises som en tynd skillelinje,
+// og som en lille overskrift når railen er foldet ud.
+const GROUPS: { label: string | null; items: { href: string; key: string; label: string }[] }[] = [
+  {
+    label: null,
+    items: [{ href: "/", key: "oversigt", label: "Oversigt" }],
+  },
+  {
+    label: "Procesmodel",
+    items: [
+      { href: "/processes", key: "processer", label: "Processer" },
+      { href: "/landscape", key: "systemer", label: "Systemer" },
+      { href: "/roles", key: "roller", label: "Roller" },
+      { href: "/data", key: "data", label: "Data" },
+    ],
+  },
 ];
 
 type OrgUser = { id: string; name: string; email: string; role: string };
@@ -103,26 +121,38 @@ export function Nav({
         }`}
       >
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-4">
-          <div className="space-y-px">
-            {ITEMS.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  title={item.label}
-                  className={`flex h-[29px] items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-[12.5px] transition-colors ${
-                    active
-                      ? "bg-(--color-clay) font-medium text-white"
-                      : "text-(--color-muted) hover:bg-(--color-sunken) hover:text-(--color-text)"
-                  }`}
-                >
-                  {ICONS[item.key]}
-                  {open && <span className="min-w-0 flex-1 leading-none">{item.label}</span>}
-                </Link>
-              );
-            })}
-          </div>
+          {GROUPS.map((group, gi) => (
+            <div
+              key={group.label ?? "root"}
+              className={gi > 0 ? "mt-3 border-t border-(--color-line) pt-3" : ""}
+            >
+              {group.label && (
+                <div className="mb-1.5 flex h-4 items-center px-2.5">
+                  {open && <span className="eyebrow whitespace-nowrap">{group.label}</span>}
+                </div>
+              )}
+              <div className="space-y-px">
+                {group.items.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      className={`flex h-[29px] items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-[12.5px] transition-colors ${
+                        active
+                          ? "bg-(--color-clay) font-medium text-white"
+                          : "text-(--color-muted) hover:bg-(--color-sunken) hover:text-(--color-text)"
+                      }`}
+                    >
+                      {ICONS[item.key]}
+                      {open && <span className="min-w-0 flex-1 leading-none">{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="border-t border-(--color-line) px-2.5 py-3">

@@ -13,8 +13,7 @@ function isDuplicateEmailError(error: unknown) {
 }
 
 // Kontrolpanelet redigerer organisationens navn og hvem der er brugere
-// (dem der kan logge ind og bruge systemet — ikke Respondenter, se
-// /respondents) på tværs af hele appen — derfor revalideres roden, ikke en
+// (dem der kan logge ind og bruge systemet) på tværs af hele appen — derfor revalideres roden, ikke en
 // enkelt underside.
 export async function updateOrganizationName(organizationId: string, name: string) {
   if (!name.trim()) return;

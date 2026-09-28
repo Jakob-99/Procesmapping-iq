@@ -1,9 +1,9 @@
-// Corner IQ — interview-platform
-// Datamodellen er lille med vilje: en organisation har respondenter (folk man
-// kan interviewe), interview-agenter (navngivne, genbrugelige interview-
-// definitioner) og interview-runder (navngivne samlinger man opretter først
-// og sender ind i). Et interview binder alle tre sammen (agent + respondent +
-// runde) og gemmer samtalen + noter.
+// Corner IQ — procesmapping
+// En organisation har en procesmodel (processer → underprocesser), og hver
+// underproces tegnes som et svimlane-diagram: skridt (aktiviteter,
+// beslutninger, timere, start/slut) forbundet af pile. Skridtene udføres af
+// en rolle eller et system og kobles til de systemer og dataobjekter de
+// bruger. Diagrammet redigeres ved at tale med en agent i chatten under det.
 
 generator client {
   provider = "prisma-client-js"
@@ -43,7 +43,8 @@ model User {
   consultantAccount   ConsultantAccount? @relation(fields: [consultantAccountId], references: [id], onDelete: SetNull)
 
   loginTokens    LoginToken[]
-  sentInterviews Interview[]  @relation("InterviewSentBy")
+  ownedProcesses Process[]    @relation("ProcessOwner")
+  assignedSubs   SubProcess[] @relation("SubProcessOwner")
 
   // Mail er kun unik PR. organisation, ikke globalt — en konsulent kan have
   // sit eget sæde hos flere kunder med samme mail.
@@ -130,19 +131,19 @@ model Engagement {
 
   createdAt DateTime @default(now())
 
-  respondents      Respondent[]
-  interviewAgents  InterviewAgent[]
-  interviewRounds  InterviewRound[]
-  interviews       Interview[]
   consultantAccess ConsultantEngagementAccess[]
   apiKeys          ApiKey[]
+
+  processes     Process[]
+  systems       SystemRef[]
+  dataObjects   DataObject[]
+  businessRoles BusinessRole[]
 }
 
-// En langtidsholdbar service-nøgle der lader en ekstern klient (fx en
-// MCP-server en Claude-agent taler med, se app/api/mcp/route.ts) læse ét
-// engagements data uden en browser-session. Kun keyHash gemmes — selve
-// nøglen vises én gang ved oprettelse (se createApiKey i admin/actions.ts)
-// og kan ikke genskabes bagefter, kun tilbagekaldes.
+// En langtidsholdbar nøgle til MCP-serveren (app/api/mcp/route.ts), så en
+// Claude-agent kan læse engagementets procesmodel uden en browser-session.
+// Kun keyHash gemmes — selve nøglen vises én gang ved oprettelse i
+// Kontrolpanelet og kan ikke genskabes bagefter, kun tilbagekaldes.
 model ApiKey {
   id           String     @id @default(cuid())
   engagementId String
@@ -154,177 +155,280 @@ model ApiKey {
   revokedAt    DateTime?
 }
 
-// ------------------------------------------------------------- Interview-platform
+// ------------------------------------------------------- Aktører og objekter
 
-// En person man kan sende et interview til. Selvstændigt objekt (ikke bundet
-// til noget andet i grafen) — matcher ikke en User, for en respondent har
-// ikke nødvendigvis nogen login-konto til selve appen.
-model Respondent {
+// En fast rolle i forretningen — en menneskelig aktør, ikke en systembruger.
+// Processkridt udføres af en rolle, ikke af en navngiven person.
+model BusinessRole {
   id           String     @id @default(cuid())
   engagementId String
   engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
   name         String
-  email        String
-  title        String?
-  categories   String? // JSON array af forretningsområder — flere pr. respondent, se lib/categories.ts
+  description  String?
+  createdAt    DateTime   @default(now())
+
+  steps ProcessStep[]
+  lanes ProcessLane[] @relation("LaneActorRole")
+}
+
+// Et IT-system i landskabet (ERP, CRM, Excel-ark, ...).
+model SystemRef {
+  id           String     @id @default(cuid())
+  engagementId String
+  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name         String
+  category     String? // ERP | CRM | BI | Fil | Egenudviklet | Andet
+  isMasterData Boolean    @default(false)
+  // Kan en AI-agent tale direkte med systemet (API, webhook) — eller kræver det et menneske?
+  canAgentConnect Boolean @default(false)
+  // Integrationsmuligheder, kommasepareret: MANUAL, API, MCP, RPA (se
+  // lib/domain.ts). Tom = ikke afklaret. canAgentConnect følger med.
+  integrations String @default("")
   notes        String?
-  createdAt    DateTime   @default(now())
 
-  loginTokens RespondentLoginToken[]
-  interviews  Interview[]
+  // AI-parathed — de tre forudsætninger for at et systemfundament er
+  // berettiget til AI native (se lib/readiness.ts).
+  hasOpenApi        Boolean @default(false)
+  masterDataQuality String? // GOOD | PARTIAL | POOR
+  processesUpToDate Boolean @default(false)
+  readinessNotes    String?
 
-  @@unique([engagementId, email])
+  stepLinks StepSystem[]
+  dataLinks DataObject[]
+  // Skridt der har DETTE system som aktør/svimlane (se ProcessStep.actorSystemId)
+  // — adskilt fra stepLinks, som er "systemet bruges i skridtet".
+  actorSteps ProcessStep[] @relation("StepActorSystem")
+  lanes      ProcessLane[] @relation("LaneActorSystem")
 }
 
-// Samme 6-cifrede magic-kode-mønster som LoginToken/ConsultantLoginToken —
-// egen model fordi Respondent ikke er en User.
-model RespondentLoginToken {
-  id           String     @id @default(cuid())
-  token        String     @unique
-  respondentId String
-  respondent   Respondent @relation(fields: [respondentId], references: [id], onDelete: Cascade)
-  expiresAt    DateTime
-  usedAt       DateTime?
-  createdAt    DateTime   @default(now())
+// Et forretningsobjekt der flyder gennem processerne (Ordre, Kunde, Faktura...).
+model DataObject {
+  id             String     @id @default(cuid())
+  engagementId   String
+  engagement     Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  isMasterData   Boolean    @default(false)
+  ownerSystemId  String?
+  ownerSystem    SystemRef? @relation(fields: [ownerSystemId], references: [id], onDelete: SetNull)
+
+  stepLinks StepData[]
 }
 
-// En navngivet, genbrugelig interview-definition — det konsulenten bygger og
-// sender ud. Prompten er opdelt i tre felter (formål, prækvalificering,
-// hvad der skal undersøges) i stedet for ét frit felt, plus tre 1-5 skalaer
-// der styrer agentens stil (opfølgende/formel/spørgsmålslængde).
-model InterviewAgent {
+// ------------------------------------------------------------------ Processer
+
+// En end-to-end proces, fx "Order to Cash".
+model Process {
   id           String     @id @default(cuid())
   engagementId String
   engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
   name         String
+  description  String?
+  // Procesmodellen: kerneprocesser løber gennem forretningen, støtteprocesser bærer dem.
+  category     String  @default("CORE") // CORE | SUPPORT
+  startEvent   String?
+  endEvent     String?
+  ownerId      String?
+  owner        User?      @relation("ProcessOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
 
-  purpose          String // Hvad er agentens formål
-  prequalification String? // Hvad er prækvalificering — hvem/hvad skal være opfyldt før/under interviewet
-  investigate      String? // Hvad skal agenten undersøge — konkrete emner/spørgsmål at bore i
+  subProcesses SubProcess[]
+  groups       SubProcessGroup[]
+}
 
-  followUpLevel        Int @default(3) // 1-5: hvor opfølgende agenten er
-  formalityLevel       Int @default(3) // 1-5: hvor formel tonen er
-  questionLengthLevel  Int @default(3) // 1-5: hvor lange/uddybende spørgsmålene er
+// En navngivet gruppe af underprocesser på procesområdets side (fx
+// "Rekrutering" under HR). Underprocesser uden gruppe står i en unavngivet
+// gruppe øverst.
+model SubProcessGroup {
+  id        String   @id @default(cuid())
+  processId String
+  process   Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  subProcesses SubProcess[]
+}
+
+// En underproces i en e2e-proces — enheden der tegnes som ét diagram.
+model SubProcess {
+  id        String  @id @default(cuid())
+  processId String
+  process   Process @relation(fields: [processId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     SubProcessGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  name      String
+  // Kort beskrivelse af forløbet — vises som note over diagrammet.
+  summary   String?
+
+  inScope     Boolean @default(true)
+  scopeReason String?
+
+  assigneeId String?
+  assignee   User?   @relation("SubProcessOwner", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  status String @default("NOT_STARTED") // NOT_STARTED | DRAFT | IN_VALIDATION | VALIDATED | NEEDS_UPDATE
+
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  steps        ProcessStep[]
+  flows        ProcessFlow[]
+  lanes        ProcessLane[]
+  pools        ProcessPool[]
+  chatMessages ProcessChatMessage[]
+  findings     ProcessFinding[]
+  notes        ProcessNote[]
+}
+
+// En fritstående note på tegnefladen (som en BPMN-tekstannotation).
+// x/y er position i pixels i forhold til diagrammets øverste venstre hjørne.
+model ProcessNote {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  text         String     @default("")
+  x            Float
+  y            Float
+  createdAt    DateTime   @default(now())
+}
+
+// Analysen under diagrammet: problemer/findings, ønsker og forbedringer, og
+// mulige ideer der er diskuteret. Kan skrives i hånden eller noteres af
+// proces-agenten fra chatten. stepId kobler punktet til et bestemt skridt.
+model ProcessFinding {
+  id           String       @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess   @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  kind         String // PROBLEM | WISH | IDEA
+  text         String
+  stepId       String?
+  step         ProcessStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  sortOrder    Int          @default(0)
+  createdAt    DateTime     @default(now())
+}
+
+// En ekstra pool i diagrammet — en selvstændig ramme med egen titel og egne
+// svimlaner, typisk en ekstern part (fx "Rekrutteringspartner"), som hoved-
+// poolen kun taler med via besked-pile. Hovedpoolen er implicit (titel =
+// underprocessens navn) og har ingen række; svimlaner uden poolId ligger i den.
+model ProcessPool {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  name         String
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  lanes ProcessLane[]
+}
+
+// En svimlane (lodret kolonne i diagrammet). Hver underproces har ALTID
+// præcis én isDefault-lane ("Proces", ingen aktør) til skridt uden aktør —
+// den kan hverken slettes eller få en aktør. Et skridts faktiske aktør er
+// ProcessStep.actorRoleId/actorSystemId; ensureLane opretter lanen med det
+// samme, så de to aldrig løber fra hinanden. sortOrder styrer rækkefølgen
+// af kolonnerne fra venstre mod højre.
+model ProcessLane {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  isDefault    Boolean    @default(false)
+  sortOrder    Int        @default(0)
+  poolId       String?
+  pool         ProcessPool? @relation(fields: [poolId], references: [id], onDelete: SetNull)
+
+  actorRoleId   String?
+  actorRole     BusinessRole? @relation("LaneActorRole", fields: [actorRoleId], references: [id], onDelete: SetNull)
+  actorSystemId String?
+  actorSystem   SystemRef?    @relation("LaneActorSystem", fields: [actorSystemId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 
-  // Offentligt selvbetjenings-link (QR/URL) — respondenten opretter sig selv
-  // og starter interviewet uden forudgående oprettelse, se joinPublicInterview.
-  // Skal pege på en runde, ligesom en almindelig afsendelse — vælges når
-  // linket aktiveres.
-  publicJoinEnabled Boolean         @default(false)
-  publicJoinSlug    String?         @unique
-  publicJoinRoundId String?
-  publicJoinRound   InterviewRound? @relation(fields: [publicJoinRoundId], references: [id], onDelete: SetNull)
-
-  interviews     Interview[]
-  quantQuestions QuantQuestion[]
-  images         AgentImage[]
+  @@unique([subProcessId, actorRoleId, actorSystemId])
 }
 
-// Et billede konsulenten lægger ind ved agentens opsætning (fx en emballage-
-// mockup, et koncept-oplæg) — agenten kan referere det ved "label" i sin
-// prompt og selv vurdere HVORNÅR under interviewet det er relevant at vise
-// det (se showImage i AGENT_TURN_SCHEMA, lib/interview.ts), ikke fast
-// placeret et bestemt sted i samtalen.
-model AgentImage {
-  id               String         @id @default(cuid())
-  interviewAgentId String
-  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
-  label            String // kort, unikt reference-navn agenten bruger til at pege på billedet
-  data             String // data-URI (base64) — små nok billeder til at ligge i SQLite uden filhåndtering
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-}
-
-// En navngivet "samling" af afsendte interviews — oprettes FØRST, og vælges
-// derefter når man sender interviews ud (sammen med agent + respondenter).
-// Gør det muligt at sende samme agent ud flere gange over tid (fx
-// "Trivsel Q1", "Trivsel Q2") uden at deres indsigter blandes sammen —
-// indsigter er scoped til runden, ikke agenten.
-model InterviewRound {
+// Ét element i diagrammet. sortOrder er rækken (diagrammet løber nedad),
+// svimlanen er aktøren. Nøjagtig ét af actorRoleId/actorSystemId er sat ad
+// gangen, aldrig begge — ingen af dem betyder den grundlæggende lane.
+model ProcessStep {
   id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-  name         String
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+
+  stepType    String  @default("TASK") // START | END | TASK | DECISION | TIMER
+  name        String
+  description String?
+
+  actorRoleId   String?
+  actorRole     BusinessRole? @relation(fields: [actorRoleId], references: [id], onDelete: SetNull)
+  actorSystemId String?
+  actorSystem   SystemRef?    @relation("StepActorSystem", fields: [actorSystemId], references: [id], onDelete: SetNull)
+
+  isManual Boolean @default(true)
+
+  decisionCriteria String?
+  output           String?
+  frequency        String?
+  durationMin      Int?
+  painPoint        String?
+  sortOrder        Int     @default(0)
+
+  systems  StepSystem[]
+  data     StepData[]
+  findings ProcessFinding[]
+  outgoing ProcessFlow[] @relation("FlowFrom")
+  incoming ProcessFlow[] @relation("FlowTo")
+}
+
+// En pil mellem to skridt. Fra en beslutning har pilene hver sin etiket
+// ("Ja"/"Nej", "Ferie"/"Arbejdsdag"). MESSAGE er en stiplet besked-pil til
+// en ekstern part, som i BPMN.
+model ProcessFlow {
+  id           String      @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess  @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  fromStepId   String
+  fromStep     ProcessStep @relation("FlowFrom", fields: [fromStepId], references: [id], onDelete: Cascade)
+  toStepId     String
+  toStep       ProcessStep @relation("FlowTo", fields: [toStepId], references: [id], onDelete: Cascade)
+  label        String?
+  kind         String      @default("SEQUENCE") // SEQUENCE | MESSAGE
+
+  @@unique([fromStepId, toStepId])
+}
+
+model StepSystem {
+  id       String      @id @default(cuid())
+  stepId   String
+  step     ProcessStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  systemId String
+  system   SystemRef   @relation(fields: [systemId], references: [id], onDelete: Cascade)
+  usage    String? // READ | WRITE | BOTH
+
+  @@unique([stepId, systemId])
+}
+
+model StepData {
+  id           String      @id @default(cuid())
+  stepId       String
+  step         ProcessStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  dataObjectId String
+  dataObject   DataObject  @relation(fields: [dataObjectId], references: [id], onDelete: Cascade)
+  direction    String? // INPUT | OUTPUT | BOTH
+
+  @@unique([stepId, dataObjectId])
+}
+
+// Samtalen med proces-agenten under diagrammet. Gemmes så man kan vende
+// tilbage og se hvad der er ændret og hvorfor.
+model ProcessChatMessage {
+  id           String     @id @default(cuid())
+  subProcessId String
+  subProcess   SubProcess @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
+  role         String // user | agent
+  content      String
+  userName     String?
   createdAt    DateTime   @default(now())
-
-  interviews          Interview[]
-  publicJoinForAgents InterviewAgent[]
-}
-
-// Et fast, sammenligneligt spørgsmål agenten stiller alle respondenter (i
-// modsætning til de frie, adaptive AI-probes) — svarene kan aggregeres på
-// tværs af interviews under samme agent.
-model QuantQuestion {
-  id               String         @id @default(cuid())
-  interviewAgentId String
-  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
-  prompt           String
-  type             String // CHOICE | SCALE
-  options          String? // JSON array af muligheder, kun CHOICE
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-
-  answers QuantAnswer[]
-}
-
-model QuantAnswer {
-  id              String        @id @default(cuid())
-  quantQuestionId String
-  quantQuestion   QuantQuestion @relation(fields: [quantQuestionId], references: [id], onDelete: Cascade)
-  interviewId     String
-  interview       Interview     @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  value           String // valgt mulighed, eller "1".."5" for scale
-  createdAt       DateTime      @default(now())
-
-  @@unique([quantQuestionId, interviewId])
-}
-
-// Én afsendt samtale: én agent, én respondent.
-model Interview {
-  id           String     @id @default(cuid())
-  engagementId String
-  engagement   Engagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
-
-  interviewAgentId String
-  interviewAgent   InterviewAgent @relation(fields: [interviewAgentId], references: [id], onDelete: Cascade)
-  respondentId      String
-  respondent        Respondent    @relation(fields: [respondentId], references: [id], onDelete: Cascade)
-
-  interviewRoundId String
-  interviewRound   InterviewRound @relation(fields: [interviewRoundId], references: [id], onDelete: Cascade)
-
-  // Hvem i organisationen sendte interviewet — kun til visning, ingen logik.
-  sentById String?
-  sentBy   User?   @relation("InterviewSentBy", fields: [sentById], references: [id], onDelete: SetNull)
-
-  status      String    @default("OPEN") // OPEN | COMPLETED
-  startedAt   DateTime  @default(now())
-  completedAt DateTime?
-
-  messages     InterviewMessage[]
-  notes        InterviewNote[]
-  quantAnswers QuantAnswer[]
-}
-
-model InterviewMessage {
-  id          String    @id @default(cuid())
-  interviewId String
-  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  role        String // agent | user
-  content     String
-  imageLabel  String? // sat når denne agent-tur viste et AgentImage — bruges til at genskabe billedhistorikken ved genoptagelse
-  createdAt   DateTime  @default(now())
-}
-
-// Det agenten fandt værd at huske fra interviewet.
-model InterviewNote {
-  id          String    @id @default(cuid())
-  interviewId String
-  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
-  category    String // PAIN | WORKAROUND | RISK | KNOWLEDGE | OPPORTUNITY
-  content     String
-  importance  Int       @default(2) // 1-3
-  createdAt   DateTime  @default(now())
 }

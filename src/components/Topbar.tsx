@@ -16,10 +16,10 @@ import { updateOwnProfile } from "@/app/actions/profile";
   Ordremodtagelse.
 */
 const SECTIONS: Record<string, string> = {
-  respondents: "Respondenter",
-  agents: "Interview agenter",
-  interviews: "Undersøgelser",
-  rounds: "Undersøgelser",
+  processes: "Processer",
+  landscape: "Systemer",
+  roles: "Roller",
+  data: "Data",
 };
 
 function Chevron() {

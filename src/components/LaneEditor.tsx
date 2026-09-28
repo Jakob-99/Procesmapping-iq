@@ -1,0 +1,243 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import {
+  createLane,
+  deleteLane,
+  setLaneActor,
+  setLanePool,
+} from "@/app/(customer)/processes/[processId]/[subId]/actions";
+import { createSystem } from "@/app/(customer)/landscape/actions";
+import { createRole } from "@/app/(customer)/roles/actions";
+import { InlineDelete } from "./InlineDelete";
+
+const NEW_ROLE = "__new_role__";
+const NEW_SYSTEM = "__new_system__";
+
+type LaneOption = {
+  id: string;
+  isDefault: boolean;
+  actorRoleId: string | null;
+  actorSystemId: string | null;
+  actorName: string | null;
+  poolId: string | null;
+};
+type RoleOption = { id: string; name: string };
+type SystemOption = { id: string; name: string };
+type PoolOption = { id: string; name: string };
+
+/*
+  Svimlanerne er selvstændige objekter — klik på en svimlanes header i
+  diagrammet (SwimlaneDiagram.onLaneClick) åbner dette panel. laneId er
+  enten en rigtig ProcessLane.id eller sentinelen "__new__" (fra
+  "+ Svimlane"-knappen i topbjælken), som viser opret-formularen i stedet for
+  redigér.
+*/
+export function LaneEditor({
+  processId,
+  subProcessId,
+  laneId,
+  lanes,
+  roles,
+  systems,
+  pools,
+  mainPoolName,
+  initialPoolId = null,
+  onDone,
+}: {
+  processId: string;
+  subProcessId: string;
+  laneId: string;
+  lanes: LaneOption[];
+  roles: RoleOption[];
+  systems: SystemOption[];
+  pools: PoolOption[];
+  mainPoolName: string;
+  initialPoolId?: string | null;
+  onDone: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [newLanePoolId, setNewLanePoolId] = useState<string | null>(initialPoolId);
+  const [creatingActor, setCreatingActor] = useState<"role" | "system" | null>(null);
+  const [newActorName, setNewActorName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const lane = laneId === "__new__" ? null : lanes.find((l) => l.id === laneId);
+  const isNew = laneId === "__new__";
+
+  if (!isNew && !lane) return null;
+
+  const currentValue = lane?.actorRoleId
+    ? `role:${lane.actorRoleId}`
+    : lane?.actorSystemId
+      ? `system:${lane.actorSystemId}`
+      : "";
+
+  function applyActor(value: string) {
+    if (value === NEW_ROLE) return setCreatingActor("role");
+    if (value === NEW_SYSTEM) return setCreatingActor("system");
+    if (!value) return;
+    const actor = {
+      type: value.startsWith("role:") ? ("role" as const) : ("system" as const),
+      id: value.split(":")[1],
+    };
+    setError(null);
+    startTransition(async () => {
+      try {
+        if (isNew) await createLane(processId, subProcessId, actor, newLanePoolId);
+        else await setLaneActor(processId, subProcessId, laneId, actor);
+        onDone();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Kunne ikke gemme.");
+      }
+    });
+  }
+
+  function applyPool(value: string) {
+    const poolId = value || null;
+    if (isNew) return setNewLanePoolId(poolId);
+    startTransition(async () => {
+      await setLanePool(processId, subProcessId, laneId, poolId);
+      onDone();
+    });
+  }
+
+  function createActor() {
+    if (!newActorName.trim() || !creatingActor) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const created =
+          creatingActor === "role"
+            ? await createRole(newActorName)
+            : await createSystem(newActorName);
+        if (created) {
+          const actor = { type: creatingActor, id: created.id };
+          if (isNew) await createLane(processId, subProcessId, actor, newLanePoolId);
+          else await setLaneActor(processId, subProcessId, laneId, actor);
+          onDone();
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Kunne ikke gemme.");
+      } finally {
+        setCreatingActor(null);
+        setNewActorName("");
+      }
+    });
+  }
+
+  function remove() {
+    if (!lane || lane.isDefault) return;
+    startTransition(async () => {
+      await deleteLane(processId, subProcessId, lane.id);
+      onDone();
+    });
+  }
+
+  const actorSelect = (
+    <select
+      value={currentValue}
+      disabled={pending}
+      onChange={(e) => applyActor(e.target.value)}
+      className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+    >
+      <option value="">Vælg rolle eller system…</option>
+      <optgroup label="Roller">
+        {roles.map((r) => (
+          <option key={r.id} value={`role:${r.id}`}>
+            {r.name}
+          </option>
+        ))}
+        <option value={NEW_ROLE}>+ Opret ny rolle…</option>
+      </optgroup>
+      <optgroup label="Systemer">
+        {systems.map((s) => (
+          <option key={s.id} value={`system:${s.id}`}>
+            {s.name}
+          </option>
+        ))}
+        <option value={NEW_SYSTEM}>+ Opret nyt system…</option>
+      </optgroup>
+    </select>
+  );
+
+  return (
+    <div>
+      <h2 className="text-[15px] font-semibold tracking-tight">
+        {isNew ? "Ny svimlane" : lane?.isDefault ? "Proces (grundlæggende)" : "Svimlane"}
+      </h2>
+      <div className="mb-3 mt-1.5 border-t border-(--color-line)" />
+
+      <div className="space-y-3">
+        {lane?.isDefault && (
+          <p className="text-[11.5px] leading-relaxed text-(--color-muted)">
+            Den grundlæggende svimlane kan ikke slettes — men den kan sagtens
+            få tildelt en aktør ligesom enhver anden svimlane.
+          </p>
+        )}
+        {!lane?.isDefault && pools.length > 0 && (
+          <div>
+            <div className="eyebrow mb-1">Pool</div>
+            <select
+              value={(isNew ? newLanePoolId : lane?.poolId) ?? ""}
+              disabled={pending}
+              onChange={(e) => applyPool(e.target.value)}
+              className="w-full rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+            >
+              <option value="">{mainPoolName}</option>
+              {pools.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
+          <div className="eyebrow mb-1">{isNew ? "Rolle eller system" : "Aktør"}</div>
+          {creatingActor ? (
+            <div className="flex gap-1">
+              <input
+                value={newActorName}
+                onChange={(e) => setNewActorName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && createActor()}
+                autoFocus
+                placeholder={creatingActor === "role" ? "Ny rolle" : "Nyt system"}
+                className="min-w-0 flex-1 rounded-md border border-(--color-line) bg-(--color-surface) px-2 py-1.5 text-[12.5px] outline-none focus:border-(--color-clay)"
+              />
+              <button
+                onClick={createActor}
+                disabled={pending || !newActorName.trim()}
+                className="shrink-0 rounded-md border border-(--color-clay-line) bg-(--color-clay-wash) px-2.5 text-[11.5px] font-medium text-(--color-clay) disabled:opacity-40"
+              >
+                Opret
+              </button>
+              <button
+                onClick={() => {
+                  setCreatingActor(null);
+                  setNewActorName("");
+                }}
+                className="shrink-0 text-[11px] text-(--color-faint) hover:text-(--color-text)"
+              >
+                Annullér
+              </button>
+            </div>
+          ) : (
+            actorSelect
+          )}
+        </div>
+
+        {!isNew && !lane?.isDefault && (
+          <InlineDelete
+            onConfirm={remove}
+            pending={pending}
+            label="Slet svimlane"
+            title="Skridtene i svimlanen mister deres aktør og falder tilbage i Proces"
+          />
+        )}
+      </div>
+
+      {error && <p className="mt-2 text-[11.5px] text-(--color-alert)">{error}</p>}
+    </div>
+  );
+}

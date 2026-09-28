@@ -26,8 +26,8 @@ export function hasApiKey() {
   Vigtigt: npm's Windows-shims (claude.cmd/.ps1) kan IKKE køres sikkert med
   argumenter som et array uden `shell: true` — men `shell: true` sender
   argumenterne igennem cmd.exe's tekst-parsing, hvilket både er usikkert
-  (interview-transskriptioner indeholder respondentens egen fritekst, som
-  kunne indeholde shell-metategn) og i praksis korrumperede flagene i test.
+  (chatbeskeder og procesdata er brugerens egen fritekst, som kunne
+  indeholde shell-metategn) og i praksis korrumperede flagene i test.
   Løsningen er at finde og kalde den rigtige .exe direkte — en almindelig
   Windows-eksekverbar kan trygt kaldes med et argument-array, ingen shell,
   ingen escaping-problemer.
@@ -89,7 +89,7 @@ async function generateJsonViaCli<T>(opts: {
     );
   }
 
-  const { stdout } = await execFileAsync(
+  const run = execFileAsync(
     exe,
     [
       "-p",
@@ -106,8 +106,12 @@ async function generateJsonViaCli<T>(opts: {
       "--",
       opts.prompt,
     ],
-    { stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1024 * 1024 * 20, timeout: 120000 },
+    { maxBuffer: 1024 * 1024 * 20, timeout: 180000 },
   );
+  // execFile understøtter ikke stdio-optionen — luk i stedet stdin med det
+  // samme, så CLI'en ikke venter på input der aldrig kommer.
+  run.child.stdin?.end();
+  const { stdout } = await run;
 
   const envelope = JSON.parse(stdout) as CliResultEnvelope;
   if (envelope.is_error || envelope.subtype !== "success") {

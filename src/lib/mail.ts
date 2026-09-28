@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
-// RESEND_API_KEY er valgfri med vilje: uden den falder alle tre login-flows
-// (kunde, konsulent, respondent) tilbage til at vise koden direkte på
+// RESEND_API_KEY er valgfri med vilje: uden den falder begge login-flows
+// (kunde, konsulent) tilbage til at vise koden direkte på
 // skærmen i stedet for at sende en mail — så appen stadig virker lokalt
 // uden at nogen har sat en Resend-konto op. Sæt nøglen i .env for at slå
 // rigtig mailudsendelse til.
@@ -42,39 +42,5 @@ export async function sendLoginCodeEmail(
   // til at vise koden, i stedet for at brugeren står helt fast. Logges
   // alligevel, ellers er en forkert Resend-opsætning umulig at diagnosticere.
   if (error) console.error("Resend-fejl ved afsendelse af login-kode:", error);
-  return !error;
-}
-
-// Sendes når et interview oprettes til en respondent (se sendInterview i
-// app/(customer)/interviews/actions.ts) — uden denne fik respondenten intet
-// at vide om at der ventede et interview, og skulle selv gætte sig til at
-// gå ind på /respond/login.
-export async function sendInterviewInviteEmail(
-  to: string,
-  respondentName: string,
-  agentName: string,
-  loginUrl: string,
-): Promise<boolean> {
-  if (!resend) return false;
-
-  const { error } = await resend.emails.send({
-    from: FROM,
-    to,
-    subject: `Du er inviteret til et interview: ${agentName}`,
-    html: `
-      <div style="font-family: -apple-system, sans-serif; max-width: 420px; margin: 0 auto;">
-        <p style="color: #241c17; font-size: 15px;">Hej ${respondentName},</p>
-        <p style="color: #6b5a4c; font-size: 14px;">Du er blevet inviteret til at deltage i <b>${agentName}</b>.</p>
-        <p style="margin: 24px 0;">
-          <a href="${loginUrl}" style="background: #e35f1e; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600;">
-            Start interviewet
-          </a>
-        </p>
-        <p style="color: #96826e; font-size: 12px;">Klik på knappen og indtast din mail (${to}) for at få en login-kode.</p>
-      </div>
-    `,
-  });
-
-  if (error) console.error("Resend-fejl ved afsendelse af interview-invitation:", error);
   return !error;
 }

@@ -9,16 +9,24 @@ export function PageHeader({
   title,
   lead,
   action,
+  icon,
 }: {
   eyebrow?: string;
   title: string;
   lead?: string;
   action?: ReactNode;
+  icon?: ReactNode;
 }) {
   return (
     <header className="shrink-0 border-b border-(--color-line) px-8 py-5">
       <div className="flex items-start justify-between gap-8">
-        <div className="max-w-2xl">
+        <div className="flex max-w-2xl items-start gap-4">
+          {icon && (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-(--color-clay-wash)">
+              {icon}
+            </div>
+          )}
+          <div>
           {eyebrow && <div className="eyebrow mb-1">{eyebrow}</div>}
           <h1 className="text-[24px] font-semibold leading-tight tracking-tight">
             {title}
@@ -28,6 +36,7 @@ export function PageHeader({
               {lead}
             </p>
           )}
+          </div>
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>

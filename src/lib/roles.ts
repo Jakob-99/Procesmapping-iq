@@ -1,4 +1,4 @@
-// Labels for User.role — organisationens egne login-brugere, ikke Respondenter.
+// Labels for User.role — organisationens egne login-brugere.
 export const ROLES = {
   FDE: "Senior konsulent (FDE)",
   PROCESS_OWNER: "Procesejer",
