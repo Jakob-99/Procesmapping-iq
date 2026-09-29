@@ -1,21 +1,20 @@
-import fs from "node:fs";
-import path from "node:path";
 import { isGateway } from "@/lib/domain";
 import { docsLifted, layoutGrid, sharedDocs } from "@/lib/swimlane-layout";
 import { zip } from "@/lib/zip";
+import { placeConnector, placeInstance, stencil, stencilFile, stencilMasterFiles, type StencilKey } from "./stencil";
 
 /*
   Et svimlanediagram som Visio-fil (.vsdx) — samme opbygning som diagrammet
   i appen: pools side om side med titel øverst, lodrette svimlaner, ét skridt
-  pr. række (lib/swimlane-layout), aktiviteter som afrundede bokse med
-  [systemer], gateways som ruder med markør, start tynd cirkel, slut tyk,
-  timer dobbeltcirkel, dokumenter til højre for aktiviteten.
+  pr. række (lib/swimlane-layout), dokumenter til højre for aktiviteten.
+
+  Aktiviteter, start/slut, timere, gateways og pile er figurerne fra
+  Cornerstones' stencil (lib/visio/stencil.ts), så diagrammet kan arbejdes
+  videre med i Visio som ethvert andet procesdiagram. Pools, svimlaner og
+  dokumenter findes ikke i stencilet og tegnes som almindelige figurer.
 
   Pilene lægges efter samme regler som i SwimlaneDiagram.tsx og limes til
   figurerne, så de følger med, når man flytter rundt i Visio.
-
-  Pakken bygges fra bunden; kun stilark og tema (Visios standardtema
-  "Simple") hentes fra lib/visio/template.
 */
 
 export type VisioInput = {
@@ -35,7 +34,12 @@ const TOP_PAD = 14;
 const BOTTOM_PAD = 22;
 const POOL_GAP = 20;
 const MARGIN = 24;
-const TASK_W = 150;
+// Stencilets egne mål (px): Activity er 0,98 tomme bred og findes i fire højder.
+const TASK_W = 94.5;
+const TASK_HEIGHTS = [76, 100, 124, 148];
+const GW_W = 47.2;
+const GW_H = 37.8;
+const EVENT_D = 37.8;
 const DOC_W = 90;
 const DOC_H = 50;
 
@@ -205,84 +209,35 @@ class Page {
     ])}</Section>`;
   }
 
-  /*
-    En pil som Visios egen "Dynamic connector" (master 1 i
-    template/masters.xml), limet til de to figurer. Så opfører den sig som
-    en pil man selv har tegnet i Visio: den lægges pænt om, når man flytter
-    en figur, og teksten bliver stående vandret på linjen. Punkterne (px)
-    er ruten fra appen, så pilen står rigtigt, til man ændrer noget.
+  // En figur fra Cornerstones' stencil (se lib/visio/stencil.ts), placeret i px.
+  stencil(key: StencilKey, o: { name: string; x: number; y: number; text?: string; bpmnName?: string; textBelow?: { w: number; h: number; above?: boolean } }) {
+    const r = placeInstance(key, () => this.id++, { ...o, x: this.X(o.x), y: this.Y(o.y) });
+    this.shapes.push(r.xml);
+    return r.id;
+  }
 
-    Som i Visio selv er geometrien ikke drejet: Width/Height er afstanden
-    fra begin til slut, og punkterne regnes fra begin.
+  /*
+    En pil fra stencilet — Sequence Flow, eller Message Flow mellem pools —
+    limet til de to figurer, så den lægges om, når man flytter en figur i
+    Visio. Punkterne (px) er ruten fra appen, så pilen står rigtigt, til man
+    ændrer noget. Dokumentpile er stiplede sekvenspile.
   */
   line(
     pts: number[][],
-    o: { dashed?: boolean; label?: string | null; labelAt?: { x: number; y: number }; from: number; to: number },
+    o: { message?: boolean; dashed?: boolean; label?: string | null; labelAt?: { x: number; y: number }; from: number; to: number },
   ) {
-    const id = this.id++;
-    const P = pts.map(([x, y]) => [this.X(x), this.Y(y)]);
-    const [bx, by] = P[0];
-    const [ex, ey] = P[P.length - 1];
-    const local = ([x, y]: number[]) => [x - bx, y - by];
-    const glue = (n: string, trig: string) => `<Cell N="${n}" V="${+(n.startsWith("Begin") ? (n.endsWith("X") ? bx : by) : n.endsWith("X") ? ex : ey).toFixed(6)}" F="_WALKGLUE(${trig})"/>`;
-    // Formlerne arves fra masteret (F="Inh"); V er den værdi Visio viser,
-    // indtil noget regnes om — den skal derfor være rigtig fra start.
-    const inh = (n: string, v: number) => `<Cell N="${n}" V="${+v.toFixed(6)}" F="Inh"/>`;
-    const cells = [
-      inh("PinX", (bx + ex) / 2),
-      inh("PinY", (by + ey) / 2),
-      inh("Width", ex - bx),
-      inh("Height", ey - by),
-      inh("LocPinX", (ex - bx) / 2),
-      inh("LocPinY", (ey - by) / 2),
-      glue("BeginX", "BegTrigger,EndTrigger,WalkPreference"),
-      glue("BeginY", "BegTrigger,EndTrigger,WalkPreference"),
-      glue("EndX", "EndTrigger,BegTrigger,WalkPreference"),
-      glue("EndY", "EndTrigger,BegTrigger,WalkPreference"),
-      `<Cell N="BegTrigger" V="2" F="_XFTRIGGER(Sheet.${o.from}!EventXFMod)"/>`,
-      `<Cell N="EndTrigger" V="2" F="_XFTRIGGER(Sheet.${o.to}!EventXFMod)"/>`,
-      cell("ConFixedCode", 6),
-      cell("LineWeight", 1 / 72, ' U="PT"'),
-      cell("LineColor", INK),
-      cell("LinePattern", o.dashed ? 2 : 1),
-      cell("EndArrow", 13),
-      cell("EndArrowSize", 1),
-      cell("BeginArrow", 0),
-      cell("Rounding", 0),
-      cell("ShdwPattern", 0),
-    ];
-    this.connects.push(
-      `<Connect FromSheet="${id}" FromCell="BeginX" FromPart="9" ToSheet="${o.from}" ToCell="PinX" ToPart="3"/>`,
-      `<Connect FromSheet="${id}" FromCell="EndX" FromPart="12" ToSheet="${o.to}" ToCell="PinX" ToPart="3"/>`,
-    );
-    let extra = "";
-    if (o.label) {
-      // Tekstens plads styres af masterets TextPosition-håndtag.
-      const at = o.labelAt ?? { x: (pts[0][0] + pts[pts.length - 1][0]) / 2, y: (pts[0][1] + pts[pts.length - 1][1]) / 2 };
-      const [lx, ly] = local([this.X(at.x), this.Y(at.y)]);
-      const tw = (o.label.length * 5.2 + 8) * PX;
-      const th = 14 * PX;
-      cells.push(
-        cell("TextBkgnd", "#ffffff"),
-        inh("TxtPinX", lx),
-        inh("TxtPinY", ly),
-        inh("TxtWidth", tw),
-        inh("TxtHeight", th),
-        inh("TxtLocPinX", tw / 2),
-        inh("TxtLocPinY", th / 2),
-      );
-      extra = `<Section N="Control"><Row N="TextPosition">${cell("X", lx)}${cell("Y", ly)}${inh("XDyn", lx)}${inh("YDyn", ly)}<Cell N="XCon" V="0" F="Inh"/></Row></Section><Section N="Character"><Row IX="0">${cell("Font", "Calibri")}${cell("Color", INK)}${cell("Size", 8.5 / 72, ' U="PT"')}${cell("FontScale", 1)}</Row></Section>`;
-    }
-    // Masteret har tre punkter; en lige pil med to skal slette det tredje,
-    // ellers arves det.
-    const geom = `<Section N="Geometry" IX="0">${P.map((p, i) => {
-      const [x, y] = local(p);
-      return `<Row T="${i ? "LineTo" : "MoveTo"}" IX="${i + 1}">${cell("X", x)}${cell("Y", y)}</Row>`;
-    }).join("")}${P.length < 3 ? `<Row T="LineTo" IX="3" Del="1"/>` : ""}</Section>`;
-    this.shapes.push(
-      `<Shape ID="${id}" NameU="Dynamic connector.${id}" Name="Dynamic connector.${id}" Type="Shape" Master="1">${cells.join("")}${extra}${geom}${o.label ? `<Text>${esc(o.label)}</Text>` : ""}</Shape>`,
-    );
-    return id;
+    const r = placeConnector(o.message ? "REF_MSG" : "REF_SEQ", () => this.id++, {
+      name: o.message ? "Message Flow" : "Sequence Flow",
+      pts: pts.map(([x, y]) => [this.X(x), this.Y(y)]),
+      from: o.from,
+      to: o.to,
+      label: o.label,
+      labelAt: o.labelAt ? [this.X(o.labelAt.x), this.Y(o.labelAt.y)] : undefined,
+      dashed: o.dashed,
+    });
+    this.shapes.push(r.xml);
+    this.connects.push(...r.connects);
+    return r.id;
   }
 }
 
@@ -298,7 +253,14 @@ function labelPoint(pts: number[][]) {
   return { x: best.x, y: best.y };
 }
 
-const MARKER: Record<string, string> = { DECISION: "X", PARALLEL: "+", INCLUSIVE: "O", EVENT_GATEWAY: "◎" };
+// Aktivitetens tekst (navn og [systemer]) og den stencil-højde, den kræver.
+function taskBox(s: { name: string; systems: string[] }) {
+  const sys = s.systems.length ? `[${s.systems.join(", ")}]` : "";
+  const text = sys ? `${s.name}\n${sys}` : s.name;
+  const need = 16 + lineCount(text, TASK_W - 10, 6.2) * 14;
+  const h = TASK_HEIGHTS.find((th) => th >= need) ?? TASK_HEIGHTS[TASK_HEIGHTS.length - 1];
+  return { text, h };
+}
 
 export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
   const { steps, flows } = input;
@@ -307,7 +269,9 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
   );
   const { rows, offs } = layoutGrid(steps, flows);
   const rowCount = Math.max(1, ...rows.values());
-  const bodyH = TOP_PAD + rowCount * ROW_H + BOTTOM_PAD;
+  // Rækkerne skal være høje nok til den højeste aktivitet.
+  const rowH = Math.max(ROW_H, ...steps.filter((s) => s.type === "TASK").map((s) => taskBox(s).h + 32));
+  const bodyH = TOP_PAD + rowCount * rowH + BOTTOM_PAD;
 
   const poolBoxes = [
     { name: input.title, lanes: visibleLanes.filter((l) => !l.poolId || !input.pools.some((p) => p.id === l.poolId)) },
@@ -369,38 +333,39 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
     if (!lb) continue;
     const cellL = lb.l + ((offs.get(s.id) ?? 0) - lb.minOff) * lb.colW;
     const cx = lb.hasDocs ? cellL + 22 + TASK_W / 2 : cellL + lb.colW / 2;
-    const cy = bodyTop + TOP_PAD + ((rows.get(s.id) ?? 1) - 1) * ROW_H + ROW_H / 2;
+    const cy = bodyTop + TOP_PAD + ((rows.get(s.id) ?? 1) - 1) * rowH + rowH / 2;
 
     if (s.type === "START" || s.type === "END") {
-      const cyC = s.type === "START" ? cy + 11 : cy - 11;
-      const id = page.shape({
-        x: cx, y: cyC, w: 34, h: 34, geom: "ellipse", line: s.type === "START" ? 1.25 : 3,
-        text: s.name, size: 9,
-        textBox: s.type === "START" ? { x: -58, y: -22, w: 150, h: 18 } : { x: -58, y: 38, w: 150, h: 18 },
+      // Stencilets Start-End: teksten står under ringen.
+      const lines = lineCount(s.name, 140, 5.6);
+      // Start har teksten over ringen (pilen går ud i bunden), slut under.
+      const cyC = s.type === "START" ? cy + 10 : cy - 12;
+      const id = page.stencil(s.type === "START" ? "REF_START" : "REF_END", {
         name: s.type === "START" ? "Start" : "Slut",
+        x: cx, y: cyC, text: s.name, bpmnName: s.name,
+        textBelow: { w: Math.min(140, s.name.length * 5.6 + 10) * PX, h: lines * 13 * PX, above: s.type === "START" },
       });
       shapeOf.set(s.id, id);
-      rectOf.set(s.id, R(cx, cyC, 34, 34));
+      rectOf.set(s.id, R(cx, cyC, EVENT_D, EVENT_D));
     } else if (isGateway(s.type)) {
-      const id = page.shape({
-        x: cx, y: cy, w: 42, h: 42, geom: "diamond", line: 1.25,
-        text: MARKER[s.type] ?? "X", size: 14, bold: s.type !== "EVENT_GATEWAY", name: "Gateway",
-      });
-      if (s.name) page.shape({ x: cx + 29 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Gatewaytekst" });
+      const key = s.type === "PARALLEL" ? "REF_GW_P" : s.type === "INCLUSIVE" ? "REF_GW_O" : s.type === "EVENT_GATEWAY" ? "REF_GW_E" : "REF_GW_X";
+      // Den hændelsesbaserede har sit eget mærke; stencilets "X" er gruppens tekst og skal væk.
+      const id = page.stencil(key, { name: "Gateway", x: cx, y: cy, text: s.type === "EVENT_GATEWAY" ? "" : undefined });
+      if (s.name) page.shape({ x: cx + GW_W / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Gatewaytekst" });
       shapeOf.set(s.id, id);
-      rectOf.set(s.id, R(cx, cy, 42, 42));
+      rectOf.set(s.id, R(cx, cy, GW_W, GW_H));
     } else if (s.type === "TIMER") {
-      const id = page.shape({ x: cx, y: cy, w: 34, h: 34, geom: "ellipse", line: 2.5, text: "⏱", size: 11, name: "Timer" });
-      if (s.name) page.shape({ x: cx + 29 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Timertekst" });
+      const id = page.stencil("REF_TIMER", { name: "Timer", x: cx, y: cy });
+      if (s.name) page.shape({ x: cx + EVENT_D / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Timertekst" });
       shapeOf.set(s.id, id);
-      rectOf.set(s.id, R(cx, cy, 34, 34));
+      rectOf.set(s.id, R(cx, cy, EVENT_D, EVENT_D));
     } else {
+      // Stencilets Activity i den laveste af de fire højder, teksten kan være i.
       const sys = s.systems.length ? `[${s.systems.join(", ")}]` : "";
-      const h = Math.max(46, 18 + lineCount(s.name, TASK_W - 16) * 16 + (sys ? 8 + lineCount(sys, TASK_W - 16, 7) * 15 : 0));
-      const id = page.shape({
-        x: cx, y: cy, w: TASK_W, h, rounding: 10, line: 1.25, text: s.name, size: 9.5,
-        extraText: sys ? { text: sys, size: 9, bold: true } : undefined, name: "Aktivitet",
-      });
+      const text = sys ? `${s.name}\n${sys}` : s.name;
+      const need = 16 + lineCount(text, TASK_W - 10, 6.2) * 14;
+      const h = TASK_HEIGHTS.find((th) => th >= need) ?? TASK_HEIGHTS[TASK_HEIGHTS.length - 1];
+      const id = page.stencil(`REF_TASK_${h}` as StencilKey, { name: "Aktivitet", x: cx, y: cy, text });
       shapeOf.set(s.id, id);
       const act = R(cx, cy, TASK_W, h);
       rectOf.set(s.id, act);
@@ -564,7 +529,7 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
     const toId = shapeOf.get(f.to);
     if (fromId == null || toId == null) continue;
     page.line(pts, {
-      dashed: f.kind === "MESSAGE",
+      message: f.kind === "MESSAGE",
       label: f.label,
       labelAt: f.label ? labelPoint(pts) : undefined,
       from: fromId,
@@ -603,7 +568,7 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
 }
 
 function packVsdx(title: string, wIn: number, hIn: number, page: Page) {
-  const tpl = (f: string) => fs.readFileSync(path.join(process.cwd(), "src", "lib", "visio", "template", f), "utf8");
+  const masterFiles = stencilMasterFiles();
   const pageName = title.slice(0, 31) || "Diagram";
 
   const pageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -612,13 +577,13 @@ function packVsdx(title: string, wIn: number, hIn: number, page: Page) {
   }</PageContents>`;
 
   const pagesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"><Page ID="0" NameU="${esc(pageName)}" Name="${esc(pageName)}" ViewScale="-1" ViewCenterX="${+(wIn / 2).toFixed(4)}" ViewCenterY="${+(hIn / 2).toFixed(4)}"><PageSheet LineStyle="0" FillStyle="0" TextStyle="0">${cell("PageWidth", wIn)}${cell("PageHeight", hIn)}${cell("ShdwOffsetX", 0.118)}${cell("ShdwOffsetY", -0.118)}${cell("PageScale", 1, ' U="IN_F"')}${cell("DrawingScale", 1, ' U="IN_F"')}${cell("DrawingSizeType", 0)}${cell("DrawingScaleType", 0)}${cell("InhibitSnap", 0)}${cell("PrintPageOrientation", wIn > hIn ? 2 : 1)}${cell("PageShapeSplit", 1)}</PageSheet><Rel r:id="rId1"/></Page></Pages>`;
+<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"><Page ID="0" NameU="${esc(pageName)}" Name="${esc(pageName)}" ViewScale="-1" ViewCenterX="${+(wIn / 2).toFixed(4)}" ViewCenterY="${+(hIn / 2).toFixed(4)}"><PageSheet LineStyle="0" FillStyle="0" TextStyle="0">${cell("PageWidth", wIn)}${cell("PageHeight", hIn)}${cell("ShdwOffsetX", 0.118)}${cell("ShdwOffsetY", -0.118)}${cell("PageScale", 1, ' U="IN_F"')}${cell("DrawingScale", 1, ' U="IN_F"')}${cell("DrawingSizeType", 0)}${cell("DrawingScaleType", 0)}${cell("InhibitSnap", 0)}${cell("PrintPageOrientation", wIn > hIn ? 2 : 1)}${cell("PageShapeSplit", 1)}${stencil().layers}</PageSheet><Rel r:id="rId1"/></Page></Pages>`;
 
   const files = [
     {
       path: "[Content_Types].xml",
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/><Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/><Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/><Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/><Override PartName="/visio/masters/masters.xml" ContentType="application/vnd.ms-visio.masters+xml"/><Override PartName="/visio/masters/master1.xml" ContentType="application/vnd.ms-visio.master+xml"/><Override PartName="/visio/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/visio/theme/theme2.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/><Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/><Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/><Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/><Override PartName="/visio/masters/masters.xml" ContentType="application/vnd.ms-visio.masters+xml"/>${masterFiles.map((m) => `<Override PartName="/visio/masters/${m}" ContentType="application/vnd.ms-visio.master+xml"/>`).join("")}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
     },
     {
       path: "_rels/.rels",
@@ -635,24 +600,20 @@ function packVsdx(title: string, wIn: number, hIn: number, page: Page) {
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Microsoft Visio</Application><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Pages</vt:lpstr></vt:variant><vt:variant><vt:i4>1</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="1" baseType="lpstr"><vt:lpstr>${esc(pageName)}</vt:lpstr></vt:vector></TitlesOfParts><AppVersion>16.0000</AppVersion></Properties>`,
     },
-    { path: "visio/document.xml", data: tpl("document.xml") },
+    // Stilark og masters fra Cornerstones' stencil (lib/visio/stencil).
+    { path: "visio/document.xml", data: stencilFile("document.xml") },
     {
       path: "visio/_rels/document.xml.rels",
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/pages" Target="pages/pages.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme2.xml"/><Relationship Id="rId4" Type="http://schemas.microsoft.com/visio/2010/relationships/windows" Target="windows.xml"/><Relationship Id="rId5" Type="http://schemas.microsoft.com/visio/2010/relationships/masters" Target="masters/masters.xml"/></Relationships>`,
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/pages" Target="pages/pages.xml"/><Relationship Id="rId4" Type="http://schemas.microsoft.com/visio/2010/relationships/windows" Target="windows.xml"/><Relationship Id="rId5" Type="http://schemas.microsoft.com/visio/2010/relationships/masters" Target="masters/masters.xml"/></Relationships>`,
     },
-    // Visios eget "Dynamic connector"-master, som pilene bygger på.
-    { path: "visio/masters/masters.xml", data: tpl("masters.xml") },
-    { path: "visio/masters/master1.xml", data: tpl("connector-master.xml") },
-    {
-      path: "visio/masters/_rels/masters.xml.rels",
-      data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/master" Target="master1.xml"/></Relationships>`,
-    },
+    { path: "visio/masters/masters.xml", data: stencilFile("masters/masters.xml") },
+    { path: "visio/masters/_rels/masters.xml.rels", data: stencilFile("masters/_rels/masters.xml.rels") },
+    ...masterFiles.map((m) => ({ path: `visio/masters/${m}`, data: stencilFile(`masters/${m}`) })),
     {
       path: "visio/pages/_rels/page1.xml.rels",
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/master" Target="../masters/master1.xml"/></Relationships>`,
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${masterFiles.map((m, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.microsoft.com/visio/2010/relationships/master" Target="../masters/${m}"/>`).join("")}</Relationships>`,
     },
     // Visio nægter at åbne en pakke uden vinduesopsætning.
     {
@@ -660,8 +621,6 @@ function packVsdx(title: string, wIn: number, hIn: number, page: Page) {
       data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Windows ClientWidth="1200" ClientHeight="800" xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"><Window ID="0" WindowType="Drawing" WindowState="1073741824" WindowLeft="0" WindowTop="0" WindowWidth="1200" WindowHeight="800" ContainerType="Page" Page="0" ViewScale="-1" ViewCenterX="${+(wIn / 2).toFixed(4)}" ViewCenterY="${+(hIn / 2).toFixed(4)}"><ShowRulers>1</ShowRulers><ShowGrid>0</ShowGrid><ShowPageBreaks>0</ShowPageBreaks><ShowGuides>1</ShowGuides><ShowConnectionPoints>1</ShowConnectionPoints><GlueSettings>9</GlueSettings><SnapSettings>65847</SnapSettings><SnapExtensions>34</SnapExtensions><SnapAngles/><DynamicGridEnabled>1</DynamicGridEnabled><TabSplitterPos>0.5</TabSplitterPos></Window></Windows>`,
     },
-    { path: "visio/theme/theme1.xml", data: tpl("theme1.xml") },
-    { path: "visio/theme/theme2.xml", data: tpl("theme2.xml") },
     { path: "visio/pages/pages.xml", data: pagesXml },
     {
       path: "visio/pages/_rels/pages.xml.rels",
