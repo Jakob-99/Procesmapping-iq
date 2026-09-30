@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { activeEngagement } from "@/lib/engagement";
 import { getSessionUser } from "@/lib/session";
-import { SUBPROCESS_STATUS } from "@/lib/domain";
+import { SUBPROCESS_STATUS, isStartOrEnd } from "@/lib/domain";
 import { PixelLogo } from "@/components/PixelLogo";
 import { LawnScene } from "@/components/LawnScene";
 import { FoundationCard } from "@/components/FoundationCard";
@@ -134,7 +134,7 @@ export default async function Home() {
   const inScope = subs.filter((s) => s.inScope);
   const validated = inScope.filter((s) => s.status === "VALIDATED").length;
   const coverage = inScope.length ? Math.round((validated / inScope.length) * 100) : 0;
-  const drawn = subs.filter((s) => s.steps.some((st) => st.stepType !== "START" && st.stepType !== "END")).length;
+  const drawn = subs.filter((s) => s.steps.some((st) => !isStartOrEnd(st.stepType))).length;
   const count = (kind: string) => findingCounts.find((f) => f.kind === kind)?._count ?? 0;
   const findings = count("PROBLEM") + count("WISH") + count("IDEA");
 

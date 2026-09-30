@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { SUBPROCESS_STATUS, STEP_TYPES, isGateway, type StepType } from "@/lib/domain";
+import { SUBPROCESS_STATUS, STEP_TYPES, isGateway, isStart, type StepType } from "@/lib/domain";
 import { requireSessionUser } from "@/lib/session";
 import { ensureLane } from "@/lib/process-lanes";
 import { runProcessAgent } from "@/lib/process-agent";
+import { interviewOpening } from "@/lib/interview-guide";
 import {
   assertDataObjectOwnership,
   assertRoleOwnership,
@@ -414,7 +415,7 @@ export async function addStep(
     });
   } else if (data.afterStepId) {
     ids.splice(ids.indexOf(data.afterStepId) + 1, 0, created.id);
-    if (type !== "START") {
+    if (!isStart(type)) {
       await db.processFlow.updateMany({
         where: { subProcessId, fromStepId: data.afterStepId },
         data: { fromStepId: created.id },
@@ -428,7 +429,7 @@ export async function addStep(
     const all = await db.processStep.findMany({ where: { id: { in: ids } }, select: { id: true, stepType: true } });
     const typeOf = new Map(all.map((s) => [s.id, s.stepType]));
     const firstEnd = type === "END" ? -1 : ids.findIndex((id) => typeOf.get(id) === "END");
-    if (type === "START") ids.unshift(created.id);
+    if (isStart(type)) ids.unshift(created.id);
     else if (firstEnd >= 0) ids.splice(firstEnd, 0, created.id);
     else ids.push(created.id);
   }
@@ -598,8 +599,15 @@ export async function deleteNote(processId: string, subProcessId: string, noteId
 
 // ---------------------------------------------------------------- Analyse
 
-const FINDING_KINDS = ["PROBLEM", "WISH", "IDEA"] as const;
+const FINDING_KINDS = ["PROBLEM", "WISH", "IDEA", "TIME"] as const;
 type FindingKind = (typeof FINDING_KINDS)[number];
+
+// Timer pr. måned gælder kun tidsforbrug; alt andet end et positivt tal er "ukendt".
+function cleanHours(kind: string, hours: number | null | undefined) {
+  return kind === "TIME" && typeof hours === "number" && Number.isFinite(hours) && hours > 0
+    ? Math.round(hours * 10) / 10
+    : null;
+}
 
 async function assertFindingInSubProcess(subProcessId: string, findingId: string) {
   const f = await db.processFinding.findUnique({ where: { id: findingId }, select: { subProcessId: true } });
@@ -612,6 +620,7 @@ export async function addFinding(
   kind: FindingKind,
   text: string,
   stepId: string | null,
+  hoursPerMonth: number | null = null,
 ) {
   if (!text.trim() || !FINDING_KINDS.includes(kind)) return;
   await assertSubProcessOwnership(subProcessId);
@@ -621,7 +630,14 @@ export async function addFinding(
     orderBy: { sortOrder: "desc" },
   });
   await db.processFinding.create({
-    data: { subProcessId, kind, text: text.trim(), stepId, sortOrder: (last?.sortOrder ?? -1) + 1 },
+    data: {
+      subProcessId,
+      kind,
+      text: text.trim(),
+      stepId,
+      hoursPerMonth: cleanHours(kind, hoursPerMonth),
+      sortOrder: (last?.sortOrder ?? -1) + 1,
+    },
   });
   revalidatePath(path(processId, subProcessId));
 }
@@ -630,17 +646,19 @@ export async function updateFinding(
   processId: string,
   subProcessId: string,
   findingId: string,
-  data: { text?: string; stepId?: string | null },
+  data: { text?: string; stepId?: string | null; hoursPerMonth?: number | null },
 ) {
   await assertSubProcessOwnership(subProcessId);
   await assertFindingInSubProcess(subProcessId, findingId);
   let stepId = data.stepId;
   if (stepId && !(await assertStepInSubProcess(subProcessId, stepId))) stepId = null;
+  const current = await db.processFinding.findUniqueOrThrow({ where: { id: findingId }, select: { kind: true } });
   await db.processFinding.update({
     where: { id: findingId },
     data: {
       ...(data.text?.trim() ? { text: data.text.trim() } : {}),
       ...(stepId !== undefined ? { stepId } : {}),
+      ...(data.hoursPerMonth !== undefined ? { hoursPerMonth: cleanHours(current.kind, data.hoursPerMonth) } : {}),
     },
   });
   revalidatePath(path(processId, subProcessId));
@@ -685,8 +703,39 @@ export async function sendProcessChat(processId: string, subProcessId: string, m
   }
 }
 
+/*
+  Knappen "Interview": proces-agenten interviewer efter procesdiagram-
+  skillens guide (lib/interview-guide.ts) og tegner diagrammet, når
+  overleveringen er bekræftet. Interviewet starter med skillens ene store
+  åbningsspørgsmål, med proces og område sat ind, som guiden beder om.
+*/
+export async function startProcessInterview(processId: string, subProcessId: string) {
+  await assertSubProcessOwnership(subProcessId);
+  const sp = await db.subProcess.findUniqueOrThrow({
+    where: { id: subProcessId },
+    select: { name: true, process: { select: { name: true } } },
+  });
+  await db.subProcess.update({ where: { id: subProcessId }, data: { interviewActive: true } });
+  await db.processChatMessage.create({
+    data: {
+      subProcessId,
+      role: "agent",
+      content: `Vi kortlægger «${sp.name}» under ${sp.process.name}.\n\n${interviewOpening()}`,
+    },
+  });
+  revalidatePath(path(processId, subProcessId));
+}
+
+export async function stopProcessInterview(processId: string, subProcessId: string) {
+  await assertSubProcessOwnership(subProcessId);
+  await db.subProcess.update({ where: { id: subProcessId }, data: { interviewActive: false } });
+  revalidatePath(path(processId, subProcessId));
+}
+
 export async function clearProcessChat(processId: string, subProcessId: string) {
   await assertSubProcessOwnership(subProcessId);
   await db.processChatMessage.deleteMany({ where: { subProcessId } });
+  // Uden samtalen er der intet interview at fortsætte.
+  await db.subProcess.update({ where: { id: subProcessId }, data: { interviewActive: false } });
   revalidatePath(path(processId, subProcessId));
 }

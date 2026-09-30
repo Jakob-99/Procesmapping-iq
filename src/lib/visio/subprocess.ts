@@ -1,7 +1,17 @@
-import { isGateway } from "@/lib/domain";
+import { isGateway, isStart, isStartOrEnd } from "@/lib/domain";
 import { docsLifted, layoutGrid, sharedDocs } from "@/lib/swimlane-layout";
+import { labelPoint, routeFlows, type Rect } from "@/lib/swimlane-routing";
 import { zip } from "@/lib/zip";
-import { placeConnector, placeInstance, stencil, stencilFile, stencilMasterFiles, type StencilKey } from "./stencil";
+import {
+  placeConnector,
+  placeInstance,
+  stencil,
+  stencilFile,
+  stencilMasterFiles,
+  type GluePoints,
+  type Side,
+  type StencilKey,
+} from "./stencil";
 
 /*
   Et svimlanediagram som Visio-fil (.vsdx) — samme opbygning som diagrammet
@@ -11,7 +21,10 @@ import { placeConnector, placeInstance, stencil, stencilFile, stencilMasterFiles
   Aktiviteter, start/slut, timere, gateways og pile er figurerne fra
   Cornerstones' stencil (lib/visio/stencil.ts), så diagrammet kan arbejdes
   videre med i Visio som ethvert andet procesdiagram. Pools, svimlaner og
-  dokumenter findes ikke i stencilet og tegnes som almindelige figurer.
+  dokumenter findes ikke i stencilet og tegnes som almindelige figurer —
+  pools og svimlaner som Visio-containere (skridt og dokumenter er
+  medlemmer), og gateway-/timertekster som callouts til deres figur, så de
+  følger med, når man flytter rundt (se Page.contain/callout).
 
   Pilene lægges efter samme regler som i SwimlaneDiagram.tsx og limes til
   figurerne, så de følger med, når man flytter rundt i Visio.
@@ -34,8 +47,9 @@ const TOP_PAD = 14;
 const BOTTOM_PAD = 22;
 const POOL_GAP = 20;
 const MARGIN = 24;
-// Stencilets egne mål (px): Activity er 0,98 tomme bred og findes i fire højder.
-const TASK_W = 94.5;
+// Stencilets mål (px): Activity er gemt 150 px bred som boksen i appen (se
+// scripts/visio/build-stencil-template.ps1) og findes i fire højder.
+const TASK_W = 150;
 const TASK_HEIGHTS = [76, 100, 124, 148];
 const GW_W = 47.2;
 const GW_H = 37.8;
@@ -46,8 +60,6 @@ const DOC_H = 50;
 const INK = "#241c17";
 const MUTED = "#6b5a4c";
 const PAPER = "#ffffff";
-
-type Rect = { l: number; r: number; t: number; b: number; cx: number; cy: number };
 
 function esc(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -69,6 +81,43 @@ function lineCount(text: string, widthPx: number, charPx = 6.6) {
     lines += n;
   }
   return lines;
+}
+
+// Den side af figuren, et punkt på ruten ligger nærmest (px, y nedad).
+function nearestSide([x, y]: number[], b: Rect): Side {
+  const d: [Side, number][] = [
+    ["t", Math.abs(y - b.t)],
+    ["b", Math.abs(y - b.b)],
+    ["l", Math.abs(x - b.l)],
+    ["r", Math.abs(x - b.r)],
+  ];
+  return d.reduce((m, c) => (c[1] < m[1] ? c : m))[0];
+}
+
+/*
+  Flyt rutens første punkt til midten af siden. Står det allerede der, eller
+  ligger næste punkt på samme linje ud fra midten, er der intet at gøre;
+  ellers lægges et knæk midt imellem, så pilen stadig går vinkelret ud.
+*/
+function snapToMiddle(pts: number[][], side: Side, b: Rect, upper = false) {
+  const mid =
+    side === "t" ? [b.cx, b.t] : side === "b" ? [b.cx, b.b] : side === "l" ? [b.l, b.cy] : [b.r, upper ? b.t + (b.b - b.t) / 4 : b.cy];
+  const [p, n] = pts;
+  if (Math.abs(p[0] - mid[0]) < 0.5 && Math.abs(p[1] - mid[1]) < 0.5) return pts;
+  const vertical = side === "t" || side === "b";
+  if (!n) return [mid];
+  if (vertical ? Math.abs(n[0] - mid[0]) < 0.5 : Math.abs(n[1] - mid[1]) < 0.5) return [mid, ...pts.slice(1)];
+  // Knækket midt imellem siden og næste punkt, vinkelret ud fra siden.
+  const knee = vertical
+    ? [
+        [mid[0], (mid[1] + n[1]) / 2],
+        [n[0], (mid[1] + n[1]) / 2],
+      ]
+    : [
+        [(mid[0] + n[0]) / 2, mid[1]],
+        [(mid[0] + n[0]) / 2, n[1]],
+      ];
+  return [mid, ...knee, ...pts.slice(1)];
 }
 
 const cell = (n: string, v: string | number, extra = "") =>
@@ -95,13 +144,56 @@ type ShapeOpts = {
   textBox?: { x: number; y: number; w: number; h: number };
   extraText?: { text: string; size: number; bold?: boolean };
   name?: string;
+  // Et hoved af denne højde (px) med streg under — pool- og svimlanetitlen.
+  headLine?: number;
+  // Kun hovedet og kanten kan gribes; resten er gennemsigtigt, så man kan
+  // klikke og trække en markering om skridtene uden at tage svimlanen med.
+  hollow?: boolean;
+  // Visios egne strukturtyper: en container (pool, svimlane) eller en callout
+  // (dokument, gatewaytekst), der følger den figur, den hører til.
+  structure?: "Container" | "Callout";
+  // Forbindelsespunkter midt på hver side, så pile kan limes til figuren.
+  connections?: boolean;
 };
 
 class Page {
-  shapes: string[] = [];
+  shapes = new Map<number, string>();
   connects: string[] = [];
+  rels = new Map<number, Map<number, number[]>>();
   id = 1;
   constructor(public height: number) {}
+
+  /*
+    Relationerne skrives præcis som Visio selv gemmer dem (Relationships-
+    cellen): en container kender sine medlemmer (1) og et medlem sin
+    container (4); en figur kender sine callouts (3) og en callout sin figur
+    (6). Så flytter Visio svimlanens skridt med, når man trækker i
+    svimlanen, og dokumenter/gatewaytekster følger deres figur.
+  */
+  private relate(from: number, type: number, to: number) {
+    const byType = this.rels.get(from) ?? new Map<number, number[]>();
+    byType.set(type, [...(byType.get(type) ?? []), to]);
+    this.rels.set(from, byType);
+  }
+  contain(container: number, member: number) {
+    this.relate(container, 1, member);
+    this.relate(member, 4, container);
+  }
+  callout(target: number, callout: number) {
+    this.relate(target, 3, callout);
+    this.relate(callout, 6, target);
+  }
+
+  xml() {
+    return [...this.shapes]
+      .map(([id, xml]) => {
+        const byType = this.rels.get(id);
+        if (!byType) return xml;
+        const deps = [...byType].map(([type, ids]) => `DEPENDSON(${type},${ids.map((i) => `Sheet.${i}!SheetRef()`).join(",")})`);
+        return xml.replace(/^(<Shape\b[^>]*>)/, `$1<Cell N="Relationships" V="0" F="SUM(${deps.join(",")})"/>`);
+      })
+      .join("");
+  }
 
   // px → tommer, med y vendt (Visio har origo nederst til venstre).
   X = (x: number) => x * PX;
@@ -153,14 +245,46 @@ class Page {
     const chars = [charRow(0, o.size ?? 9, o.bold)];
     if (o.extraText) chars.push(charRow(1, o.extraText.size, o.extraText.bold));
     const para = `<Section N="Paragraph"><Row IX="0">${cell("HorzAlign", o.align ?? 1)}${cell("SpLine", -1.1)}</Row></Section>`;
-    const geom = this.geometry(o.geom ?? "rect", W, H, o.fill === null, o.line === 0);
+    let geom = this.geometry(o.geom ?? "rect", W, H, o.fill === null || !!o.hollow, o.line === 0);
+    if (o.headLine) {
+      const y = H - o.headLine * PX;
+      const head = [
+        [0, y],
+        [W, y],
+        [W, H],
+        [0, H],
+        [0, y],
+      ]
+        .map(([px, py], i) => `<Row T="${i ? "LineTo" : "MoveTo"}" IX="${i + 1}">${cell("X", px)}${cell("Y", py)}</Row>`)
+        .join("");
+      geom += `<Section N="Geometry" IX="1">${cell("NoFill", o.fill === null ? 1 : 0)}${cell("NoLine", 0)}${cell("NoShow", 0)}${cell("NoSnap", 0)}${head}</Section>`;
+    }
+    const user = o.structure
+      ? `<Section N="User"><Row N="msvStructureType"><Cell N="Value" V="${o.structure}" U="STR"/><Cell N="Prompt" V=""/></Row></Section>`
+      : "";
+    const connections = o.connections
+      ? `<Section N="Connection">${[
+          [0.5, 1],
+          [1, 0.5],
+          [0.5, 0],
+          [0, 0.5],
+        ]
+          .map(
+            ([fx, fy], i) =>
+              `<Row T="Connection" IX="${i}"><Cell N="X" V="${+(W * fx).toFixed(6)}" F="Width*${fx}"/><Cell N="Y" V="${+(H * fy).toFixed(6)}" F="Height*${fy}"/>${cell("DirX", 0)}${cell("DirY", 0)}${cell("Type", 0)}${cell("AutoGen", 0)}</Row>`,
+          )
+          .join("")}</Section>`
+      : "";
     const text =
       o.text || o.extraText
         ? `<Text><cp IX="0"/><pp IX="0"/>${esc(o.text ?? "")}${o.extraText ? `\n<cp IX="1"/>${esc(o.extraText.text)}` : ""}</Text>`
         : "";
+    // Punkterne står i rækkefølgen top, højre, bund, venstre (se ovenfor).
+    if (o.connections) this.glue.set(id, { sheet: id, ix: { t: 0, r: 1, b: 2, l: 3 } });
     // Navne skal være unikke på siden — Visios egen form er "Navn.ID".
-    this.shapes.push(
-      `<Shape ID="${id}" Type="Shape" LineStyle="3" FillStyle="3" TextStyle="3"${o.name ? ` NameU="${esc(o.name)}.${id}" Name="${esc(o.name)}.${id}"` : ""}>${cells.join("")}<Section N="Character">${chars.join("")}</Section>${para}${geom}${text}</Shape>`,
+    this.shapes.set(
+      id,
+      `<Shape ID="${id}" Type="Shape" LineStyle="3" FillStyle="3" TextStyle="3"${o.name ? ` NameU="${esc(o.name)}.${id}" Name="${esc(o.name)}.${id}"` : ""}>${cells.join("")}${user}<Section N="Character">${chars.join("")}</Section>${para}${connections}${geom}${text}</Shape>`,
     );
     return id;
   }
@@ -212,45 +336,64 @@ class Page {
   // En figur fra Cornerstones' stencil (se lib/visio/stencil.ts), placeret i px.
   stencil(key: StencilKey, o: { name: string; x: number; y: number; text?: string; bpmnName?: string; textBelow?: { w: number; h: number; above?: boolean } }) {
     const r = placeInstance(key, () => this.id++, { ...o, x: this.X(o.x), y: this.Y(o.y) });
-    this.shapes.push(r.xml);
+    this.shapes.set(r.id, r.xml);
+    this.glue.set(r.id, r.glue);
     return r.id;
   }
 
+  // Punkterne midt på hver side, som pilene limes til (se lib/visio/stencil.ts).
+  glue = new Map<number, GluePoints>();
+
   /*
     En pil fra stencilet — Sequence Flow, eller Message Flow mellem pools —
-    limet til de to figurer, så den lægges om, når man flytter en figur i
-    Visio. Punkterne (px) er ruten fra appen, så pilen står rigtigt, til man
-    ændrer noget. Dokumentpile er stiplede sekvenspile.
+    limet til punktet midt på den side af hver figur, ruten går ud og ind
+    ad, så enderne bliver midt på siden, også når man flytter rundt i Visio.
+    Punkterne (px) er ruten fra appen; står en ende ikke midt på siden
+    (fx en dokumentpil i dokumentets højde), flyttes den derhen med et knæk.
+    Dokumentpile er stiplede sekvenspile.
   */
   line(
-    pts: number[][],
-    o: { message?: boolean; dashed?: boolean; label?: string | null; labelAt?: { x: number; y: number }; from: number; to: number },
+    route: number[][],
+    o: {
+      message?: boolean;
+      dashed?: boolean;
+      label?: string | null;
+      labelAt?: { x: number; y: number };
+      from: number;
+      to: number;
+      fromBox: Rect;
+      toBox: Rect;
+      // Enden ved aktiviteten øverst på højre side i stedet for midt på (se GluePoint).
+      upperRight?: "from" | "to";
+    },
   ) {
+    let pts = route.map((p) => [...p]);
+    const fromSide = nearestSide(pts[0], o.fromBox);
+    const toSide = nearestSide(pts[pts.length - 1], o.toBox);
+    const upper = (which: "from" | "to", side: Side, shape: number) =>
+      o.upperRight === which && side === "r" && this.glue.get(shape)?.ix.ru != null;
+    const fromUpper = upper("from", fromSide, o.from);
+    const toUpper = upper("to", toSide, o.to);
+    pts = snapToMiddle(pts, fromSide, o.fromBox, fromUpper);
+    pts = snapToMiddle(pts.reverse(), toSide, o.toBox, toUpper).reverse();
+    const end = (shape: number, side: Side, up: boolean) => {
+      const g = this.glue.get(shape);
+      if (!g) throw new Error(`Figur ${shape} har ingen forbindelsespunkter`);
+      return { sheet: g.sheet, ix: up ? g.ix.ru! : g.ix[side] };
+    };
     const r = placeConnector(o.message ? "REF_MSG" : "REF_SEQ", () => this.id++, {
       name: o.message ? "Message Flow" : "Sequence Flow",
       pts: pts.map(([x, y]) => [this.X(x), this.Y(y)]),
-      from: o.from,
-      to: o.to,
+      from: end(o.from, fromSide, fromUpper),
+      to: end(o.to, toSide, toUpper),
       label: o.label,
       labelAt: o.labelAt ? [this.X(o.labelAt.x), this.Y(o.labelAt.y)] : undefined,
       dashed: o.dashed,
     });
-    this.shapes.push(r.xml);
+    this.shapes.set(r.id, r.xml);
     this.connects.push(...r.connects);
     return r.id;
   }
-}
-
-// Hvor en pils tekst skal stå — samme regel som i appen.
-function labelPoint(pts: number[][]) {
-  const segs = pts.slice(1).map((p, i) => {
-    const q = pts[i];
-    return { x: (p[0] + q[0]) / 2, y: (p[1] + q[1]) / 2, len: Math.hypot(p[0] - q[0], p[1] - q[1]) };
-  });
-  if (!segs.length) return { x: pts[0][0], y: pts[0][1] };
-  const last = segs[segs.length - 1];
-  const best = last.len >= 28 ? last : segs.reduce((m, s) => (s.len > m.len ? s : m), segs[0]);
-  return { x: best.x, y: best.y };
 }
 
 // Aktivitetens tekst (navn og [systemer]) og den stencil-højde, den kræver.
@@ -280,11 +423,11 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
 
   // Vandret opmåling: pools side om side, svimlanerne så brede som deres
   // yderste skridt kræver.
-  type LaneBox = { id: string; name: string; l: number; w: number; minOff: number; colW: number; hasDocs: boolean };
+  type LaneBox = { id: string; name: string; pool: number; l: number; w: number; minOff: number; colW: number; hasDocs: boolean; shapeId: number };
   const laneBoxes: LaneBox[] = [];
   const poolRects: { name: string; l: number; w: number }[] = [];
   let x = MARGIN;
-  for (const pool of poolBoxes) {
+  for (const [poolIx, pool] of poolBoxes.entries()) {
     const start = x;
     if (pool.lanes.length === 0) x += 180;
     for (const lane of pool.lanes) {
@@ -293,9 +436,11 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
       const o = ls.map((s) => offs.get(s.id) ?? 0);
       const minOff = o.length ? Math.min(...o) : 0;
       const maxOff = o.length ? Math.max(...o) : 0;
-      const colW = hasDocs ? 292 : 210;
+      // Skridtene står midt i deres kolonne; med dokumenter skal der være
+      // plads til dem til højre for en centreret aktivitet.
+      const colW = hasDocs ? 2 * (TASK_W / 2 + 22 + DOC_W + 16) : 210;
       const w = colW * (maxOff - minOff + 1);
-      laneBoxes.push({ id: lane.id, name: lane.name, l: x, w, minOff, colW, hasDocs });
+      laneBoxes.push({ id: lane.id, name: lane.name, pool: poolIx, l: x, w, minOff, colW, hasDocs, shapeId: 0 });
       x += w;
     }
     poolRects.push({ name: pool.name, l: start, w: x - start });
@@ -307,14 +452,25 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
   const top = MARGIN;
   const bodyTop = top + POOL_HEAD + LANE_HEAD;
 
-  // Pools og svimlaner (tegnes først, så de ligger bagerst).
-  for (const p of poolRects) {
-    page.shape({ x: p.l + p.w / 2, y: top + (POOL_HEAD + LANE_HEAD + bodyH) / 2, w: p.w, h: POOL_HEAD + LANE_HEAD + bodyH, line: 1.5, fill: PAPER, name: "Pool" });
-    page.shape({ x: p.l + p.w / 2, y: top + POOL_HEAD / 2, w: p.w, h: POOL_HEAD, line: 1.5, fill: PAPER, text: p.name, size: 12, bold: true, align: 0, name: "Pooltitel" });
-  }
+  // Pools og svimlaner (tegnes først, så de ligger bagerst) — som Visio-
+  // containere med titlen i hovedet, så en svimlane tager sine skridt med,
+  // når man flytter den, og et skridt skifter svimlane, når man trækker det over.
+  const poolIds = poolRects.map((p) => {
+    const h = POOL_HEAD + LANE_HEAD + bodyH;
+    return page.shape({
+      x: p.l + p.w / 2, y: top + h / 2, w: p.w, h, line: 1.5, fill: PAPER,
+      text: p.name, size: 12, bold: true, align: 0, textBox: { x: 0, y: 0, w: p.w, h: POOL_HEAD }, headLine: POOL_HEAD, hollow: true,
+      structure: "Container", name: "Pool",
+    });
+  });
   for (const lb of laneBoxes) {
-    page.shape({ x: lb.l + lb.w / 2, y: top + POOL_HEAD + (LANE_HEAD + bodyH) / 2, w: lb.w, h: LANE_HEAD + bodyH, line: 0.75, fill: null, name: "Svimlane" });
-    page.shape({ x: lb.l + lb.w / 2, y: top + POOL_HEAD + LANE_HEAD / 2, w: lb.w, h: LANE_HEAD, line: 0.75, fill: PAPER, text: lb.name, size: 10, bold: true, name: "Svimlanetitel" });
+    const h = LANE_HEAD + bodyH;
+    lb.shapeId = page.shape({
+      x: lb.l + lb.w / 2, y: top + POOL_HEAD + h / 2, w: lb.w, h, line: 0.75, fill: PAPER,
+      text: lb.name, size: 10, bold: true, textBox: { x: 0, y: 0, w: lb.w, h: LANE_HEAD }, headLine: LANE_HEAD, hollow: true,
+      structure: "Container", name: "Svimlane",
+    });
+    page.contain(poolIds[lb.pool], lb.shapeId);
   }
 
   // Skridtene.
@@ -322,7 +478,7 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
   const shapeOf = new Map<string, number>();
   const rectOf = new Map<string, Rect>();
   const R = (cx: number, cy: number, w: number, h: number): Rect => ({ l: cx - w / 2, r: cx + w / 2, t: cy - h / 2, b: cy + h / 2, cx, cy });
-  const docLines: { from: Rect; fromId: number; doc: Rect; docId: number; dir: "in" | "out" }[] = [];
+  const docLines: { from: Rect; fromId: number; doc: Rect; docId: number; dir: "in" | "out"; lifted: boolean }[] = [];
   const docRect = new Map<string, { rect: Rect; id: number }>();
   const sharedLines: { to: Rect; toId: number; source: string }[] = [];
   const shared = sharedDocs(steps, rows, offs);
@@ -332,31 +488,42 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
     const lb = laneById.get(s.laneId);
     if (!lb) continue;
     const cellL = lb.l + ((offs.get(s.id) ?? 0) - lb.minOff) * lb.colW;
-    const cx = lb.hasDocs ? cellL + 22 + TASK_W / 2 : cellL + lb.colW / 2;
+    const cx = cellL + lb.colW / 2;
     const cy = bodyTop + TOP_PAD + ((rows.get(s.id) ?? 1) - 1) * rowH + rowH / 2;
 
-    if (s.type === "START" || s.type === "END") {
-      // Stencilets Start-End: teksten står under ringen.
+    if (isStartOrEnd(s.type)) {
+      const start = isStart(s.type);
+      // Stencilets Start-End — til en start på et fast tidspunkt med
+      // udløseren "Timer" (uret i ringen).
       const lines = lineCount(s.name, 140, 5.6);
       // Start har teksten over ringen (pilen går ud i bunden), slut under.
-      const cyC = s.type === "START" ? cy + 10 : cy - 12;
-      const id = page.stencil(s.type === "START" ? "REF_START" : "REF_END", {
-        name: s.type === "START" ? "Start" : "Slut",
+      const cyC = start ? cy + 10 : cy - 12;
+      const id = page.stencil(s.type === "TIMER_START" ? "REF_START_TIMER" : start ? "REF_START" : "REF_END", {
+        name: start ? "Start" : "Slut",
         x: cx, y: cyC, text: s.name, bpmnName: s.name,
-        textBelow: { w: Math.min(140, s.name.length * 5.6 + 10) * PX, h: lines * 13 * PX, above: s.type === "START" },
+        textBelow: { w: Math.min(140, s.name.length * 5.6 + 10) * PX, h: lines * 13 * PX, above: start },
       });
+      page.contain(lb.shapeId, id);
       shapeOf.set(s.id, id);
       rectOf.set(s.id, R(cx, cyC, EVENT_D, EVENT_D));
     } else if (isGateway(s.type)) {
       const key = s.type === "PARALLEL" ? "REF_GW_P" : s.type === "INCLUSIVE" ? "REF_GW_O" : s.type === "EVENT_GATEWAY" ? "REF_GW_E" : "REF_GW_X";
       // Den hændelsesbaserede har sit eget mærke; stencilets "X" er gruppens tekst og skal væk.
       const id = page.stencil(key, { name: "Gateway", x: cx, y: cy, text: s.type === "EVENT_GATEWAY" ? "" : undefined });
-      if (s.name) page.shape({ x: cx + GW_W / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Gatewaytekst" });
+      page.contain(lb.shapeId, id);
+      if (s.name) {
+        const label = page.shape({ x: cx + GW_W / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, structure: "Callout", name: "Gatewaytekst" });
+        page.callout(id, label);
+      }
       shapeOf.set(s.id, id);
       rectOf.set(s.id, R(cx, cy, GW_W, GW_H));
     } else if (s.type === "TIMER") {
       const id = page.stencil("REF_TIMER", { name: "Timer", x: cx, y: cy });
-      if (s.name) page.shape({ x: cx + EVENT_D / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, name: "Timertekst" });
+      page.contain(lb.shapeId, id);
+      if (s.name) {
+        const label = page.shape({ x: cx + EVENT_D / 2 + 8 + 56, y: cy, w: 112, h: 40, geom: "none", line: 0, fill: null, text: s.name, size: 8.5, color: MUTED, align: 0, structure: "Callout", name: "Timertekst" });
+        page.callout(id, label);
+      }
       shapeOf.set(s.id, id);
       rectOf.set(s.id, R(cx, cy, EVENT_D, EVENT_D));
     } else {
@@ -366,6 +533,7 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
       const need = 16 + lineCount(text, TASK_W - 10, 6.2) * 14;
       const h = TASK_HEIGHTS.find((th) => th >= need) ?? TASK_HEIGHTS[TASK_HEIGHTS.length - 1];
       const id = page.stencil(`REF_TASK_${h}` as StencilKey, { name: "Aktivitet", x: cx, y: cy, text });
+      page.contain(lb.shapeId, id);
       shapeOf.set(s.id, id);
       const act = R(cx, cy, TASK_W, h);
       rectOf.set(s.id, act);
@@ -378,10 +546,13 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
         const top0 = lifted.has(s.id) ? cy - 6 - total : cy - total / 2;
         const dcy = top0 + DOC_H / 2 + k * (DOC_H + 8);
         const dcx = act.r + 22 + DOC_W / 2;
-        const docId = page.shape({ x: dcx, y: dcy, w: DOC_W, h: DOC_H, geom: "doc", line: 1, text: d.name, size: 8.5, name: "Dokument" });
+        // Et almindeligt medlem af svimlanen — ikke en callout, for Visio
+        // limer ikke pile til callouts, og så følger pilen ikke dokumentet.
+        const docId = page.shape({ x: dcx, y: dcy, w: DOC_W, h: DOC_H, geom: "doc", line: 1, text: d.name, size: 8.5, connections: true, name: "Dokument" });
+        page.contain(lb.shapeId, docId);
         const doc = R(dcx, dcy, DOC_W, DOC_H);
         docRect.set(`${s.id}:${i}`, { rect: doc, id: docId });
-        docLines.push({ from: act, fromId: id, doc, docId, dir: d.dir });
+        docLines.push({ from: act, fromId: id, doc, docId, dir: d.dir, lifted: lifted.has(s.id) });
       });
       s.data.forEach((_, i) => {
         const source = shared.get(`${s.id}:${i}`);
@@ -390,152 +561,33 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
     }
   }
 
-  // Pilene — samme regler som SwimlaneDiagram.tsx.
-  const laneOf = new Map(steps.map((s) => [s.id, s.laneId]));
-  const typeOf = new Map(steps.map((s) => [s.id, s.type]));
-  const sameOff = (a: string, b: string) => Math.abs((offs.get(a) ?? 0) - (offs.get(b) ?? 0)) < 0.01;
-  const laneRect = (id: string | undefined) => {
-    const lb = id ? laneById.get(id) : undefined;
-    return lb ? { l: lb.l, r: lb.l + lb.w } : null;
-  };
-  const inCount = new Map<string, number>();
-  const outCount = new Map<string, number>();
-  for (const f of flows) {
-    inCount.set(f.to, (inCount.get(f.to) ?? 0) + 1);
-    outCount.set(f.from, (outCount.get(f.from) ?? 0) + 1);
-  }
-  const detours = new Map<string, number>();
-  const detourOffset = (lane: string | undefined, side: "l" | "r") => {
-    const key = `${lane}:${side}`;
-    const n = detours.get(key) ?? 0;
-    detours.set(key, n + 1);
-    return 16 + n * 10;
-  };
-
-  for (const f of flows) {
-    const a = rectOf.get(f.from);
-    const b = rectOf.get(f.to);
-    if (!a || !b) continue;
-    const aRow = rows.get(f.from) ?? 0;
-    const bRow = rows.get(f.to) ?? 0;
-    const sameLane = laneOf.get(f.from) === laneOf.get(f.to);
-    const sameCol = sameLane && sameOff(f.from, f.to);
-    let pts: number[][];
-
-    if (sameCol) {
-      const blockers = steps.filter(
-        (s) =>
-          s.laneId === laneOf.get(f.from) &&
-          sameOff(s.id, f.from) &&
-          (rows.get(s.id) ?? 0) > Math.min(aRow, bRow) &&
-          (rows.get(s.id) ?? 0) < Math.max(aRow, bRow),
-      );
-      const lane = laneRect(laneOf.get(f.from));
-      if (!blockers.length && bRow > aRow) {
-        pts = [
-          [a.cx, a.b],
-          [a.cx, b.t],
-        ];
-      } else if (isGateway(typeOf.get(f.from) ?? "") && bRow > aRow) {
-        let xr = Math.max(a.r, b.r);
-        for (const s of blockers) xr = Math.max(xr, rectOf.get(s.id)?.r ?? xr);
-        const off = detourOffset(laneOf.get(f.from), "r");
-        xr = Math.min(xr + off, lane ? lane.r - 4 : xr + off);
-        const y0 = a.b + 12;
-        pts = [
-          [a.cx, a.b],
-          [a.cx, y0],
-          [xr, y0],
-          [xr, b.cy],
-          [b.r, b.cy],
-        ];
-      } else {
-        let x0 = Math.min(a.l, b.l);
-        for (const s of blockers) x0 = Math.min(x0, rectOf.get(s.id)?.l ?? x0);
-        const off = detourOffset(laneOf.get(f.from), "l");
-        x0 = Math.max(x0 - off, lane ? lane.l + 4 : x0 - off);
-        pts = [
-          [a.l, a.cy],
-          [x0, a.cy],
-          [x0, b.cy],
-          [b.l, b.cy],
-        ];
-      }
-    } else if (aRow === bRow) {
-      const right = b.cx > a.cx;
-      const sx = right ? a.r : a.l;
-      const ex = right ? b.l : b.r;
-      const mx = (sx + ex) / 2;
-      pts =
-        Math.abs(a.cy - b.cy) < 2
-          ? [
-              [sx, a.cy],
-              [ex, b.cy],
-            ]
-          : [
-              [sx, a.cy],
-              [mx, a.cy],
-              [mx, b.cy],
-              [ex, b.cy],
-            ];
-    } else if (!sameLane && isGateway(typeOf.get(f.from) ?? "") && bRow > aRow) {
-      const toRight = b.cx > a.cx;
-      pts = [
-        [toRight ? a.r : a.l, a.cy],
-        [b.cx, a.cy],
-        [b.cx, b.t],
-      ];
-    } else if (bRow <= aRow) {
-      const lane = laneRect(laneOf.get(f.from));
-      const xl = lane ? lane.l + 12 : a.l - 16;
-      const ex = b.cx > xl ? b.l : b.r;
-      pts = [
-        [a.l, a.cy],
-        [xl, a.cy],
-        [xl, b.cy],
-        [ex, b.cy],
-      ];
-    } else {
-      const between = (id: string) =>
-        steps.some((s) => {
-          const r = rows.get(s.id) ?? 0;
-          return s.laneId === laneOf.get(id) && sameOff(s.id, id) && r > aRow && r < bRow;
-        });
-      const sy = a.b;
-      const ey = b.t;
-      const y1 = between(f.from)
-        ? sy + 16
-        : between(f.to)
-          ? ey - 16
-          : (inCount.get(f.to) ?? 0) > 1
-            ? Math.max(sy + 8, ey - 18)
-            : (outCount.get(f.from) ?? 0) > 1
-              ? Math.min(ey - 8, sy + 18)
-              : Math.max(sy + 10, (sy + ey) / 2);
-      pts =
-        Math.abs(a.cx - b.cx) < 2
-          ? [
-              [a.cx, sy],
-              [a.cx, ey],
-            ]
-          : [
-              [a.cx, sy],
-              [a.cx, y1],
-              [b.cx, y1],
-              [b.cx, ey],
-            ];
-    }
+  // Pilene — samme regler som SwimlaneDiagram.tsx (lib/swimlane-routing).
+  const routes = routeFlows({
+    steps,
+    flows,
+    rows,
+    offs,
+    rect: (id) => rectOf.get(id),
+    laneRect: (id) => {
+      const lb = laneById.get(id);
+      return lb ? { l: lb.l, r: lb.l + lb.w } : undefined;
+    },
+  });
+  flows.forEach((f, i) => {
+    const pts = routes[i];
     const fromId = shapeOf.get(f.from);
     const toId = shapeOf.get(f.to);
-    if (fromId == null || toId == null) continue;
+    if (!pts || fromId == null || toId == null) return;
     page.line(pts, {
       message: f.kind === "MESSAGE",
       label: f.label,
       labelAt: f.label ? labelPoint(pts) : undefined,
       from: fromId,
       to: toId,
+      fromBox: rectOf.get(f.from)!,
+      toBox: rectOf.get(f.to)!,
     });
-  }
+  });
 
   for (const d of docLines) {
     const pts =
@@ -548,7 +600,12 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
             [d.from.r, d.doc.cy],
             [d.doc.l, d.doc.cy],
           ];
-    page.line(pts, d.dir === "in" ? { dashed: true, from: d.docId, to: d.fromId } : { dashed: true, from: d.fromId, to: d.docId });
+    page.line(
+      pts,
+      d.dir === "in"
+        ? { dashed: true, from: d.docId, to: d.fromId, fromBox: d.doc, toBox: d.from, upperRight: d.lifted ? "to" : undefined }
+        : { dashed: true, from: d.fromId, to: d.docId, fromBox: d.from, toBox: d.doc, upperRight: d.lifted ? "from" : undefined },
+    );
   }
   for (const s of sharedLines) {
     const src = docRect.get(s.source);
@@ -560,7 +617,7 @@ export function buildSubProcessVsdx(input: VisioInput): Uint8Array {
         [doc.cx, s.to.cy],
         [s.to.r, s.to.cy],
       ],
-      { dashed: true, from: src.id, to: s.toId },
+      { dashed: true, from: src.id, to: s.toId, fromBox: doc, toBox: s.to },
     );
   }
 
@@ -572,7 +629,7 @@ function packVsdx(title: string, wIn: number, hIn: number, page: Page) {
   const pageName = title.slice(0, 31) || "Diagram";
 
   const pageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"><Shapes>${page.shapes.join("")}</Shapes>${
+<PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve"><Shapes>${page.xml()}</Shapes>${
     page.connects.length ? `<Connects>${page.connects.join("")}</Connects>` : ""
   }</PageContents>`;
 

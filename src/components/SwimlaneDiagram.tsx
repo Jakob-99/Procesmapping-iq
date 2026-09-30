@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { isGateway } from "@/lib/domain";
+import { isGateway, isStart, isStartOrEnd } from "@/lib/domain";
 import { docsLifted, layoutGrid, sharedDocs } from "@/lib/swimlane-layout";
 
 /*
@@ -11,7 +11,7 @@ import { docsLifted, layoutGrid, sharedDocs } from "@/lib/swimlane-layout";
   afrundede bokse med [systemer] under teksten, data er dokument-ikoner ved
   siden af med stiplede pile ind/ud, beslutninger er X-gateways med
   etiketter på pilene, timere er dobbeltcirkler med et ur, start er en tynd
-  cirkel og slut en tyk.
+  cirkel (med et ur, når den sker på et fast tidspunkt) og slut en tyk.
 
   Figurerne er almindelig DOM i et CSS-grid; pilene tegnes bagefter i ét
   SVG-lag ud fra de målte positioner (samme fremgangsmåde som HTML-filen),
@@ -449,21 +449,25 @@ export function SwimlaneDiagram({
   }
 
   function renderNode(s: DiagramStep) {
-    if (s.type === "START" || s.type === "END") {
+    if (isStartOrEnd(s.type)) {
+      const start = isStart(s.type);
+      // Start på et fast tidspunkt: den tynde startcirkel med et ur i, som i BPMN.
       const circle = (
         <span
           ref={setAnchor(s.id)}
-          className={`block h-[34px] w-[34px] shrink-0 rounded-full bg-(--color-surface) ${
-            s.type === "START" ? "border-[1.5px]" : "border-[3.5px]"
+          className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full bg-(--color-surface) ${
+            start ? "border-[1.5px]" : "border-[3.5px]"
           } border-(--color-text)`}
-        />
+        >
+          {s.type === "TIMER_START" && <ClockIcon />}
+        </span>
       );
       const caption = <span className="text-center text-[12px] leading-snug text-(--color-text)">{s.name}</span>;
       return clickable(
         s.id,
         <>
-          {s.type === "START" ? caption : circle}
-          {s.type === "START" ? circle : caption}
+          {start ? caption : circle}
+          {start ? circle : caption}
         </>,
         "flex w-[150px] flex-col items-center gap-1.5 rounded-md bg-transparent",
       );

@@ -29,8 +29,11 @@ export type SubProcessStatus = keyof typeof SUBPROCESS_STATUS;
 // præcis én vej), parallel (+ — alle veje samtidig), inklusiv (O — én eller
 // flere veje) og hændelsesbaseret (den første hændelse der indtræffer
 // afgør vejen). DECISION er den eksklusive, af hensyn til eksisterende data.
+// TIMER_START er en start på et fast tidspunkt ("Hver onsdag kl. 9") —
+// startcirklen med et ur; TIMER er ventetiden undervejs (dobbeltcirkel).
 export const STEP_TYPES = [
   "START",
+  "TIMER_START",
   "END",
   "TASK",
   "DECISION",
@@ -45,6 +48,16 @@ export const GATEWAY_TYPES: readonly StepType[] = ["DECISION", "PARALLEL", "INCL
 
 export function isGateway(type: string) {
   return (GATEWAY_TYPES as readonly string[]).includes(type);
+}
+
+// En starthændelse — almindelig eller på et fast tidspunkt.
+export function isStart(type: string) {
+  return type === "START" || type === "TIMER_START";
+}
+
+// Start eller slut: hændelser, der ikke tæller som tegnede skridt.
+export function isStartOrEnd(type: string) {
+  return isStart(type) || type === "END";
 }
 
 // Hvordan man kommer til et system. Et system kan have flere; gemmes som
@@ -81,5 +94,6 @@ export const STEP_TYPE_LABELS: Record<StepType, string> = {
   EVENT_GATEWAY: "Hændelsesbaseret gateway",
   TIMER: "Timer",
   START: "Start",
+  TIMER_START: "Start på tidspunkt",
   END: "Slut",
 };

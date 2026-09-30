@@ -270,6 +270,10 @@ model SubProcess {
 
   status String @default("NOT_STARTED") // NOT_STARTED | DRAFT | IN_VALIDATION | VALIDATED | NEEDS_UPDATE
 
+  // Proces-agenten interviewer (knappen "Interview" i chatten) — samme
+  // interview som procesdiagram-skillen, se lib/interview-guide.ts.
+  interviewActive Boolean @default(false)
+
   sortOrder Int      @default(0)
   updatedAt DateTime @updatedAt
 
@@ -294,15 +298,20 @@ model ProcessNote {
   createdAt    DateTime   @default(now())
 }
 
-// Analysen under diagrammet: problemer/findings, ønsker og forbedringer, og
-// mulige ideer der er diskuteret. Kan skrives i hånden eller noteres af
-// proces-agenten fra chatten. stepId kobler punktet til et bestemt skridt.
+// Analysen under diagrammet: problemer/findings, ønsker og forbedringer,
+// mulige ideer der er diskuteret, og tidsforbrug der er nævnt. Kan skrives i
+// hånden eller noteres af proces-agenten fra chatten. stepId kobler punktet
+// til et bestemt skridt.
 model ProcessFinding {
   id           String       @id @default(cuid())
   subProcessId String
   subProcess   SubProcess   @relation(fields: [subProcessId], references: [id], onDelete: Cascade)
-  kind         String // PROBLEM | WISH | IDEA
+  kind         String // PROBLEM | WISH | IDEA | TIME
   text         String
+  // Kun for TIME: det nævnte tidsforbrug omregnet til timer pr. måned, når
+  // både varighed og hyppighed er kendt — ellers null og kun i text. Bruges
+  // til at vurdere hvor meget tid en automatisering kan frigøre.
+  hoursPerMonth Float?
   stepId       String?
   step         ProcessStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
   sortOrder    Int          @default(0)

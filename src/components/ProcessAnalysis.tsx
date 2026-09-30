@@ -9,15 +9,24 @@ import {
 import { InlineDelete } from "./InlineDelete";
 
 /*
-  Analysen under diagrammet i tre spalter: problemer/findings, ønsker og
-  forbedringer, og mulige ideer der er diskuteret. Hvert punkt kan kobles
-  til et skridt i diagrammet. Proces-agenten i chatten kan også selv notere
-  punkter, når de dukker op i samtalen.
+  Analysen under diagrammet i fire spalter: problemer/findings, ønsker og
+  forbedringer, mulige ideer der er diskuteret, og tidsforbrug der er nævnt.
+  Hvert punkt kan kobles til et skridt i diagrammet. Proces-agenten i chatten
+  kan også selv notere punkter, når de dukker op i samtalen. Tidsforbrug har
+  desuden timer pr. måned, når det kan regnes ud — grundlaget for at vurdere
+  hvor meget tid en automatisering kan frigøre.
 */
 
-type Kind = "PROBLEM" | "WISH" | "IDEA";
-export type Finding = { id: string; kind: string; text: string; stepId: string | null };
+type Kind = "PROBLEM" | "WISH" | "IDEA" | "TIME";
+export type Finding = { id: string; kind: string; text: string; stepId: string | null; hoursPerMonth: number | null };
 type StepOption = { id: string; name: string };
+
+const formatHours = (h: number) => `${h.toLocaleString("da-DK", { maximumFractionDigits: 1 })} t/md`;
+
+function parseHours(value: string): number | null {
+  const n = Number(value.replace(",", "."));
+  return value.trim() && Number.isFinite(n) && n > 0 ? n : null;
+}
 
 const SECTIONS: { kind: Kind; title: string; placeholder: string; dot: string }[] = [
   {
@@ -38,6 +47,12 @@ const SECTIONS: { kind: Kind; title: string; placeholder: string; dot: string }[
     placeholder: "Fx: En agent tæller kalenderne og bestiller automatisk hver onsdag",
     dot: "bg-(--color-ok)",
   },
+  {
+    kind: "TIME",
+    title: "Tidsforbrug",
+    placeholder: "Fx: Controlleren bruger ca. 3 timer hver mandag på at afstemme bestillingerne",
+    dot: "bg-(--color-warn)",
+  },
 ];
 
 export function ProcessAnalysis({
@@ -57,7 +72,7 @@ export function ProcessAnalysis({
       <p className="mb-5 max-w-[68ch] text-[12.5px] text-(--color-muted)">
         Det kortlægningen har vist. Skriv punkterne her, eller bed agenten i chatten om at notere dem.
       </p>
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {SECTIONS.map((s) => (
           <Column
             key={s.kind}
@@ -88,15 +103,19 @@ function Column({
 }) {
   const [text, setText] = useState("");
   const [stepId, setStepId] = useState("");
+  const [hours, setHours] = useState("");
   const [pending, startTransition] = useTransition();
+  const isTime = section.kind === "TIME";
+  const totalHours = items.reduce((sum, f) => sum + (f.hoursPerMonth ?? 0), 0);
 
   function add() {
     if (!text.trim()) return;
     const value = text;
     startTransition(async () => {
-      await addFinding(processId, subProcessId, section.kind, value, stepId || null);
+      await addFinding(processId, subProcessId, section.kind, value, stepId || null, isTime ? parseHours(hours) : null);
       setText("");
       setStepId("");
+      setHours("");
     });
   }
 
@@ -105,7 +124,10 @@ function Column({
       <div className="mb-3 flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${section.dot}`} />
         <h4 className="text-[14px] font-semibold tracking-tight">{section.title}</h4>
-        <span className="tabular ml-auto text-[11.5px] text-(--color-faint)">{items.length}</span>
+        <span className="tabular ml-auto text-[11.5px] text-(--color-faint)">
+          {isTime && totalHours > 0 ? `≈ ${formatHours(totalHours)} · ` : ""}
+          {items.length}
+        </span>
       </div>
 
       {items.length > 0 && (
@@ -134,6 +156,7 @@ function Column({
         {text.trim() && (
           <div className="flex items-center gap-2">
             <StepSelect value={stepId} onChange={setStepId} steps={steps} />
+            {isTime && <HoursInput value={hours} onChange={setHours} />}
             <button
               type="button"
               onClick={add}
@@ -174,6 +197,22 @@ function StepSelect({
   );
 }
 
+function HoursInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex shrink-0 items-center gap-1 text-[11.5px] text-(--color-faint)">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        placeholder="?"
+        title="Timer pr. måned — lad stå tom, hvis det ikke kan regnes ud"
+        className="tabular w-12 rounded-md border border-(--color-line) bg-(--color-surface) px-1.5 py-1.5 text-right text-[12px] text-(--color-text) outline-none focus:border-(--color-clay-line)"
+      />
+      t/md
+    </label>
+  );
+}
+
 function Item({
   finding,
   processId,
@@ -188,8 +227,10 @@ function Item({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(finding.text);
   const [stepId, setStepId] = useState(finding.stepId ?? "");
+  const [hours, setHours] = useState(finding.hoursPerMonth?.toString().replace(".", ",") ?? "");
   const [pending, startTransition] = useTransition();
   const stepName = steps.find((s) => s.id === finding.stepId)?.name;
+  const isTime = finding.kind === "TIME";
 
   if (editing) {
     return (
@@ -203,12 +244,17 @@ function Item({
         />
         <div className="flex items-center gap-2">
           <StepSelect value={stepId} onChange={setStepId} steps={steps} />
+          {isTime && <HoursInput value={hours} onChange={setHours} />}
           <button
             type="button"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                await updateFinding(processId, subProcessId, finding.id, { text, stepId: stepId || null });
+                await updateFinding(processId, subProcessId, finding.id, {
+                  text,
+                  stepId: stepId || null,
+                  ...(isTime ? { hoursPerMonth: parseHours(hours) } : {}),
+                });
                 setEditing(false);
               })
             }
@@ -236,6 +282,9 @@ function Item({
     >
       <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-(--color-text)">{finding.text}</p>
       <div className="mt-0.5 flex items-center gap-3 text-[11px] text-(--color-faint)">
+        {isTime && finding.hoursPerMonth != null && (
+          <span className="tabular font-medium text-(--color-warn)">≈ {formatHours(finding.hoursPerMonth)}</span>
+        )}
         {stepName && <span>↳ {stepName}</span>}
         <span className="ml-auto flex items-center gap-2.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <button type="button" onClick={() => setEditing(true)} className="hover:text-(--color-text)">

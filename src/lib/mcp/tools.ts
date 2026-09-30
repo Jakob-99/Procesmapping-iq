@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/lib/db";
-import { INTEGRATION_LABELS, STEP_TYPE_LABELS, SUBPROCESS_STATUS, parseIntegrations, type StepType } from "@/lib/domain";
+import { INTEGRATION_LABELS, STEP_TYPE_LABELS, SUBPROCESS_STATUS, isStartOrEnd, parseIntegrations, type StepType } from "@/lib/domain";
 import { MASTER_DATA_QUALITY_LABELS, systemReadiness, VERDICT_LABELS } from "@/lib/readiness";
 
 // MCP-værktøjer til procesmodellen. Hvert værktøj scoper altid til den
@@ -24,7 +24,16 @@ const FINDING_LABELS: Record<string, string> = {
   PROBLEM: "Problem / finding",
   WISH: "Ønske / forbedring",
   IDEA: "Mulig idé",
+  TIME: "Tidsforbrug",
 };
+const FINDING_KINDS = ["PROBLEM", "WISH", "IDEA", "TIME"] as const;
+
+// Samlet nævnt tidsforbrug (timer pr. måned) for en række analysepunkter —
+// null når intet tidsforbrug er omregnet, så "ukendt" ikke ligner "0 timer".
+function sumHours(findings: { hoursPerMonth: number | null }[]) {
+  const known = findings.filter((f) => f.hoursPerMonth != null);
+  return known.length ? Math.round(known.reduce((s, f) => s + f.hoursPerMonth!, 0) * 10) / 10 : null;
+}
 
 async function subProcessInEngagement(subProcessId: string, engagementId: string) {
   const sp = await db.subProcess.findUnique({
@@ -40,7 +49,7 @@ export function registerTools(server: McpServer, engagementId: string) {
     {
       title: "Hent procesmodellen",
       description:
-        "Hele procesmodellen: kerne- og støtteprocesser med procesejer og deres underprocesser (grupper, status, ansvarlig, antal skridt og analysepunkter). Start her for at finde id'er til get_subprocess.",
+        "Hele procesmodellen: kerne- og støtteprocesser med procesejer og deres underprocesser (grupper, status, ansvarlig, antal skridt og analysepunkter, samt nævnt tidsforbrug i timer pr. måned). Start her for at finde id'er til get_subprocess.",
       inputSchema: {},
     },
     async () => {
@@ -55,7 +64,7 @@ export function registerTools(server: McpServer, engagementId: string) {
             include: {
               assignee: { select: { name: true } },
               steps: { select: { stepType: true } },
-              _count: { select: { findings: true } },
+              findings: { select: { hoursPerMonth: true } },
             },
           },
         },
@@ -73,8 +82,9 @@ export function registerTools(server: McpServer, engagementId: string) {
             status: statusLabel(sp.status),
             inScope: sp.inScope,
             responsible: sp.assignee?.name ?? null,
-            stepCount: sp.steps.filter((s) => s.stepType !== "START" && s.stepType !== "END").length,
-            findingCount: sp._count.findings,
+            stepCount: sp.steps.filter((s) => !isStartOrEnd(s.stepType)).length,
+            findingCount: sp.findings.length,
+            hoursPerMonth: sumHours(sp.findings),
           })),
         })),
       );
@@ -86,7 +96,7 @@ export function registerTools(server: McpServer, engagementId: string) {
     {
       title: "Hent en underproces",
       description:
-        "Én underproces med hele diagrammet: pools, svimlaner (rolle eller system), skridt i rækkefølge (type, aktør, systemer, data ind/ud, frekvens, varighed, smertepunkt), pile med etiketter, analysepunkter og noter.",
+        "Én underproces med hele diagrammet: pools, svimlaner (rolle eller system), skridt i rækkefølge (type, aktør, systemer, data ind/ud, frekvens, varighed, smertepunkt), pile med etiketter, analysepunkter (problemer, ønsker, ideer og tidsforbrug med timer pr. måned) og noter.",
       inputSchema: { subProcessId: z.string().describe("Id fra get_process_model") },
     },
     async ({ subProcessId }) => {
@@ -152,7 +162,10 @@ export function registerTools(server: McpServer, engagementId: string) {
           kind: FINDING_LABELS[f.kind] ?? f.kind,
           text: f.text,
           step: f.stepId ? stepName.get(f.stepId) ?? null : null,
+          stepId: f.stepId,
+          ...(f.kind === "TIME" ? { hoursPerMonth: f.hoursPerMonth } : {}),
         })),
+        hoursPerMonth: sumHours(sp.findings),
         notes: sp.notes.map((n) => n.text).filter(Boolean),
       });
     },
@@ -235,9 +248,9 @@ export function registerTools(server: McpServer, engagementId: string) {
     {
       title: "List analysepunkter",
       description:
-        "Analysepunkterne på tværs af alle underprocesser: problemer/findings, ønsker og forbedringer, og mulige ideer — med proces, underproces og evt. skridt.",
+        "Analysepunkterne på tværs af alle underprocesser: problemer/findings, ønsker og forbedringer, mulige ideer og nævnt tidsforbrug (med timer pr. måned, når det kunne regnes ud) — med proces, underproces og evt. skridt.",
       inputSchema: {
-        kind: z.enum(["PROBLEM", "WISH", "IDEA"]).optional().describe("Kun én slags; udelad for alle"),
+        kind: z.enum(FINDING_KINDS).optional().describe("Kun én slags; udelad for alle"),
       },
     },
     async ({ kind }) => {
@@ -257,6 +270,7 @@ export function registerTools(server: McpServer, engagementId: string) {
           subProcess: f.subProcess.name,
           subProcessId: f.subProcess.id,
           step: f.step?.name ?? null,
+          ...(f.kind === "TIME" ? { hoursPerMonth: f.hoursPerMonth } : {}),
         })),
       );
     },
@@ -267,15 +281,20 @@ export function registerTools(server: McpServer, engagementId: string) {
     {
       title: "Tilføj analysepunkt",
       description:
-        "Tilføjer et analysepunkt til en underproces — et problem/finding, et ønske/forbedring eller en mulig idé — evt. koblet til et skridt. Punktet vises i underprocessens analyse i Corner IQ.",
+        "Tilføjer et analysepunkt til en underproces — et problem/finding, et ønske/forbedring, en mulig idé eller et nævnt tidsforbrug — evt. koblet til et skridt. Punktet vises i underprocessens analyse i Corner IQ.",
       inputSchema: {
         subProcessId: z.string().describe("Id fra get_process_model"),
-        kind: z.enum(["PROBLEM", "WISH", "IDEA"]),
+        kind: z.enum(FINDING_KINDS),
         text: z.string().min(1).describe("Kort og konkret, på dansk"),
         stepId: z.string().optional().describe("Id på skridtet punktet handler om (fra get_subprocess)"),
+        hoursPerMonth: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Kun for TIME: tidsforbruget i timer pr. måned, når både varighed og hyppighed er kendt"),
       },
     },
-    async ({ subProcessId, kind, text, stepId }) => {
+    async ({ subProcessId, kind, text, stepId, hoursPerMonth }) => {
       if (!(await subProcessInEngagement(subProcessId, engagementId))) return errorResult("Underprocessen findes ikke.");
       let validStepId: string | null = null;
       if (stepId) {
@@ -287,7 +306,14 @@ export function registerTools(server: McpServer, engagementId: string) {
         orderBy: { sortOrder: "desc" },
       });
       const f = await db.processFinding.create({
-        data: { subProcessId, kind, text: text.trim(), stepId: validStepId, sortOrder: (last?.sortOrder ?? -1) + 1 },
+        data: {
+          subProcessId,
+          kind,
+          text: text.trim(),
+          stepId: validStepId,
+          hoursPerMonth: kind === "TIME" && hoursPerMonth ? Math.round(hoursPerMonth * 10) / 10 : null,
+          sortOrder: (last?.sortOrder ?? -1) + 1,
+        },
       });
       return jsonResult({ ok: true, id: f.id });
     },

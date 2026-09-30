@@ -96,6 +96,10 @@ async function generateJsonViaCli<T>(opts: {
       "--output-format", "json",
       "--tools", "",
       "--exclude-dynamic-system-prompt-sections",
+      // Ingen MCP-servere fra brugerens egen opsætning (en død server kan
+      // forsinke opstarten), og gem ikke hvert kald som en session.
+      "--strict-mcp-config",
+      "--no-session-persistence",
       "--effort", opts.effort ?? "medium",
       "--system-prompt", opts.system,
       "--json-schema", JSON.stringify(opts.schema),

@@ -9,7 +9,7 @@ import {
   updateFlow,
   updateStep,
 } from "@/app/(customer)/processes/[processId]/[subId]/actions";
-import { isGateway, STEP_TYPE_LABELS, type StepType } from "@/lib/domain";
+import { isGateway, isStartOrEnd, STEP_TYPE_LABELS, type StepType } from "@/lib/domain";
 import { InlineDelete } from "./InlineDelete";
 import type { DiagramFlow, DiagramLane, DiagramStep } from "./SwimlaneDiagram";
 
@@ -33,6 +33,7 @@ const TYPES: { type: StepType; label: string; defaultName: string }[] = [
   { type: "EVENT_GATEWAY", label: "Hændelsesbaseret", defaultName: "" },
   { type: "TIMER", label: "Timer", defaultName: "Ny timer" },
   { type: "START", label: "Start", defaultName: "Start" },
+  { type: "TIMER_START", label: "Start på tidspunkt", defaultName: "Hver uge" },
   { type: "END", label: "Slut", defaultName: "Slut" },
 ];
 const GATEWAYS = TYPES.filter((t) => isGateway(t.type));
@@ -278,13 +279,13 @@ export function DiagramEditBar({
             title="Indsæt et nyt element lige efter dette"
           >
             <option value="">+ Tilføj efter…</option>
-            <TypeOptions exclude={["START"]} />
+            <TypeOptions exclude={["START", "TIMER_START"]} />
           </select>
         )}
         <button type="button" onClick={onStartConnect} disabled={pending} className={chip}>
           Forbind til…
         </button>
-        {step.type !== "START" && step.type !== "END" && (
+        {!isStartOrEnd(step.type) && (
           <button type="button" onClick={() => onOpenDetails(step.id)} className={chip}>
             Detaljer
           </button>
@@ -311,7 +312,7 @@ export function DiagramEditBar({
   const firstEnd = steps.find((s) => s.type === "END");
   const before = firstEnd ? flows.find((f) => f.to === firstEnd.id)?.from ?? null : null;
   const placement = (type: StepType) => {
-    const after = type === "START" || type === "END" ? null : before;
+    const after = isStartOrEnd(type) ? null : before;
     const laneId = after ? steps.find((s) => s.id === after)?.laneId ?? defaultLaneId : defaultLaneId;
     return [after, laneId] as const;
   };
@@ -340,6 +341,7 @@ export function DiagramEditBar({
       </select>
       {addButton("TIMER", "Timer")}
       {addButton("START", "Start")}
+      {addButton("TIMER_START", "Start på tidspunkt")}
       {addButton("END", "Slut")}
       <Divider />
       <button type="button" onClick={() => onPlaceNote(true)} className={chip}>
@@ -414,7 +416,7 @@ function NewBranch({
         title="Tilføj en ny gren ud fra gatewayen"
       >
         <option value="">+ Ny gren…</option>
-        <TypeOptions exclude={["START"]} />
+        <TypeOptions exclude={["START", "TIMER_START"]} />
       </select>
     </span>
   );

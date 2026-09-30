@@ -6,10 +6,13 @@ import { generateJson } from "./claude";
 
   Agenten får hele underprocessen som den ser ud nu (svimlaner, skridt, pile,
   systemer og data pr. skridt) plus samtalen indtil nu, og svarer med en kort
-  besked og — hvis noget skal ændres — HELE den nye udgave af processen.
-  Hele udgaven i stedet for små "tilføj/slet"-kommandoer, fordi det er
-  robust over for alt man kan finde på at bede om (flyt tre skridt, del en
-  svimlane op, omdøb alt) og kun kræver én diff-funktion her.
+  besked og — hvis noget skal ændres — enten en liste af rettelser (edits)
+  eller HELE den nye udgave af processen. Hele udgaven bruges kun når
+  diagrammet er tomt eller skal laves om fra bunden: svartiden er næsten ren
+  output-længde, og at skrive en proces på 20 skridt ud igen for at tilføje
+  ét skridt tog ~25 s mod få sekunder for en enkelt rettelse. Rettelserne
+  lægges oven på den nuværende udgave (applyEdits), så begge veje ender i
+  samme diff-funktion (applyProcess).
 
   Eksisterende skridt beholder deres id, så felter agenten ikke ser
   (frekvens, varighed, smertepunkt, …) overlever en ændring. Et id der ikke
@@ -18,9 +21,12 @@ import { generateJson } from "./claude";
 */
 
 import { STEP_TYPES, isGateway, type StepType } from "./domain";
+import { interviewGuide } from "./interview-guide";
 
 type AgentLane = { name: string; kind: "role" | "system"; pool: string };
-type AgentFinding = { id: string; kind: "PROBLEM" | "WISH" | "IDEA"; text: string; step: string };
+type FindingKind = "PROBLEM" | "WISH" | "IDEA" | "TIME";
+const FINDING_KINDS: FindingKind[] = ["PROBLEM", "WISH", "IDEA", "TIME"];
+type AgentFinding = { id: string; kind: FindingKind; text: string; step: string; hoursPerMonth: number | null };
 type AgentStep = {
   id: string;
   type: StepType;
@@ -38,7 +44,63 @@ type AgentProcess = {
   flows: AgentFlow[];
   findings: AgentFinding[];
 };
-type AgentResult = { reply: string; changed: boolean; process?: AgentProcess };
+type AgentEdit =
+  | ({ op: "set_step"; after: string } & AgentStep)
+  | { op: "remove_step"; id: string }
+  | ({ op: "set_flow" } & AgentFlow)
+  | { op: "remove_flow"; from: string; to: string }
+  | { op: "set_lanes"; lanes: AgentLane[] }
+  | { op: "set_pools"; pools: string[] }
+  | ({ op: "set_finding" } & AgentFinding)
+  | { op: "remove_finding"; id: string }
+  | { op: "set_summary"; text: string };
+type AgentResult = { reply: string; changed: boolean; interviewDone?: boolean; edits?: AgentEdit[]; process?: AgentProcess };
+
+const STRING = { type: "string" } as const;
+const LANE = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name", "kind", "pool"],
+  properties: { name: STRING, kind: { type: "string", enum: ["role", "system"] }, pool: STRING },
+} as const;
+const STEP_PROPS = {
+  id: STRING,
+  type: { type: "string", enum: [...STEP_TYPES] },
+  name: STRING,
+  lane: STRING,
+  systems: { type: "array", items: STRING },
+  data: {
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["name", "direction"],
+      properties: { name: STRING, direction: { type: "string", enum: ["INPUT", "OUTPUT"] } },
+    },
+  },
+} as const;
+const FLOW_PROPS = {
+  from: STRING,
+  to: STRING,
+  label: STRING,
+  kind: { type: "string", enum: ["SEQUENCE", "MESSAGE"] },
+} as const;
+const FINDING_PROPS = {
+  id: STRING,
+  kind: { type: "string", enum: FINDING_KINDS },
+  text: STRING,
+  step: STRING,
+  hoursPerMonth: { anyOf: [{ type: "number" }, { type: "null" }] },
+} as const;
+
+function editSchema(op: string, props: Record<string, unknown>) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["op", ...Object.keys(props)],
+    properties: { op: { type: "string", enum: [op] }, ...props },
+  };
+}
 
 const SCHEMA = {
   type: "object",
@@ -47,38 +109,39 @@ const SCHEMA = {
   properties: {
     reply: { type: "string" },
     changed: { type: "boolean" },
+    // Kun i interview-tilstand: interviewet er slut (diagrammet er tegnet, eller det er afbrudt).
+    interviewDone: { type: "boolean" },
+    edits: {
+      type: "array",
+      items: {
+        anyOf: [
+          editSchema("set_step", { ...STEP_PROPS, after: STRING }),
+          editSchema("remove_step", { id: STRING }),
+          editSchema("set_flow", FLOW_PROPS),
+          editSchema("remove_flow", { from: STRING, to: STRING }),
+          editSchema("set_lanes", { lanes: { type: "array", items: LANE } }),
+          editSchema("set_pools", { pools: { type: "array", items: STRING } }),
+          editSchema("set_finding", FINDING_PROPS),
+          editSchema("remove_finding", { id: STRING }),
+          editSchema("set_summary", { text: STRING }),
+        ],
+      },
+    },
     process: {
       type: "object",
       additionalProperties: false,
       required: ["summary", "pools", "lanes", "steps", "flows", "findings"],
       properties: {
-        summary: { type: "string" },
-        pools: { type: "array", items: { type: "string" } },
-        lanes: {
-          type: "array",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["name", "kind", "pool"],
-            properties: {
-              name: { type: "string" },
-              kind: { type: "string", enum: ["role", "system"] },
-              pool: { type: "string" },
-            },
-          },
-        },
+        summary: STRING,
+        pools: { type: "array", items: STRING },
+        lanes: { type: "array", items: LANE },
         findings: {
           type: "array",
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["id", "kind", "text", "step"],
-            properties: {
-              id: { type: "string" },
-              kind: { type: "string", enum: ["PROBLEM", "WISH", "IDEA"] },
-              text: { type: "string" },
-              step: { type: "string" },
-            },
+            required: Object.keys(FINDING_PROPS),
+            properties: FINDING_PROPS,
           },
         },
         steps: {
@@ -86,26 +149,8 @@ const SCHEMA = {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["id", "type", "name", "lane", "systems", "data"],
-            properties: {
-              id: { type: "string" },
-              type: { type: "string", enum: [...STEP_TYPES] },
-              name: { type: "string" },
-              lane: { type: "string" },
-              systems: { type: "array", items: { type: "string" } },
-              data: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "direction"],
-                  properties: {
-                    name: { type: "string" },
-                    direction: { type: "string", enum: ["INPUT", "OUTPUT"] },
-                  },
-                },
-              },
-            },
+            required: Object.keys(STEP_PROPS),
+            properties: STEP_PROPS,
           },
         },
         flows: {
@@ -113,13 +158,8 @@ const SCHEMA = {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["from", "to", "label", "kind"],
-            properties: {
-              from: { type: "string" },
-              to: { type: "string" },
-              label: { type: "string" },
-              kind: { type: "string", enum: ["SEQUENCE", "MESSAGE"] },
-            },
+            required: Object.keys(FLOW_PROPS),
+            properties: FLOW_PROPS,
           },
         },
       },
@@ -132,7 +172,7 @@ const SYSTEM = `Du er Cornerstones' proces-agent. Du hjælper en konsulent eller
 Diagrammet er et svimlane-diagram i BPMN-stil:
 - Svimlaner er lodrette kolonner, én pr. aktør. En aktør er enten en rolle (fx "Onboarding-koordinator", "Partner") eller et system der selv udfører skridtet (fx "Kanpla"). Skridt uden aktør ligger i den grundlæggende svimlane "Proces" — angiv da lane som tom streng "".
 - Forløbet løber nedad. Rækkefølgen i steps-listen ER rækkefølgen oppefra og ned, så læg skridtene i den rækkefølge forløbet faktisk sker.
-- Skridttyper: START (starthændelse, fx "Ny medarbejder er ansat"), END (sluthændelse, fx "Stillingen er publiceret" — der må gerne være flere, én pr. udfald), TASK (aktivitet, navngivet i bydeform: "Registrér timer", "Send velkomstmail"), TIMER (tidshændelse, fx "Hver onsdag", "Senest kl. 11 dagen før"), og fire gateways som i BPMN — name er spørgsmålet eller tom streng:
+- Skridttyper: START (starthændelse, fx "Ny medarbejder er ansat"), TIMER_START (start på et fast tidspunkt — startcirklen med et ur, fx "Hver onsdag kl. 9"; brug den i stedet for START, når processen starter på et bestemt tidspunkt), END (sluthændelse, fx "Stillingen er publiceret" — der må gerne være flere, én pr. udfald), TASK (aktivitet, navngivet i bydeform: "Registrér timer", "Send velkomstmail"), TIMER (tidshændelse, fx "Hver onsdag", "Senest kl. 11 dagen før"), og fire gateways som i BPMN — name er spørgsmålet eller tom streng:
   - DECISION: eksklusiv gateway (X) — præcis én af vejene vælges. De udgående pile har hver sin etiket, fx "Ferie"/"Arbejdsdag".
   - PARALLEL: parallel gateway (+) — alle udgående veje kører samtidig; bruges også til at samle parallelle spor igen.
   - INCLUSIVE: inklusiv gateway (O) — én eller flere af vejene, afhængigt af betingelser på pilene.
@@ -143,11 +183,13 @@ Diagrammet er et svimlane-diagram i BPMN-stil:
 - flows er pilene. kind SEQUENCE er det almindelige forløb; MESSAGE er en stiplet besked til en ekstern part (fx en rekrutteringspartner). label er tom streng medmindre pilen går ud fra en beslutning eller skal forklares.
 - pools er ekstra rammer ved siden af hovedpoolen (som har underprocessens navn), typisk en ekstern part som "Rekrutteringspartner". En svimlanes pool angives med poolens navn; tom streng "" = hovedpoolen. Opret kun en ekstra pool når brugeren beder om det, eller når en part tydeligt er ekstern og kun kommunikeres med via besked-pile. Pools der ikke står i listen fjernes (deres svimlaner flytter til hovedpoolen).
 
-Analysen under diagrammet er findings, i tre slags:
+Analysen under diagrammet er findings, i fire slags:
 - PROBLEM: problemer og findings i processen i dag (flaskehalse, dobbeltarbejde, manuelle indtastninger, fejl, ventetid).
 - WISH: ønsker og forbedringer som brugeren eller organisationen giver udtryk for.
 - IDEA: mulige ideer der er diskuteret — konkrete løsningsforslag, fx automatisering eller en AI-agent.
-step er id på det skridt punktet handler om, eller tom streng hvis det gælder hele processen. Eksisterende punkter beholder deres id; nye får et nyt id som "ny-f1". Når brugeren nævner et problem, et ønske eller en idé — også i forbifarten mens I kortlægger — så notér det som et punkt, formuleret kort og konkret på dansk. Du må gerne selv pege på et åbenlyst problem du ser i forløbet, men skriv kun det der kan begrundes i processen eller samtalen; opfind ingen tal.
+- TIME: tidsforbrug der bliver nævnt — hvor lang tid noget tager, hvor tit det sker, eller hvor mange der bruger tid på det (fx "Controlleren bruger ca. 3 timer hver mandag på afstemningen", "Det tager 10 minutter pr. faktura, ca. 400 fakturaer om måneden"). Skriv hvem, hvad og tallene som de blev sagt.
+step er id på det skridt punktet handler om, eller tom streng hvis det gælder hele processen. Eksisterende punkter beholder deres id; nye får et nyt id som "ny-f1". Når brugeren nævner et problem, et ønske, en idé eller et tidsforbrug — også i forbifarten mens I kortlægger — så notér det som et punkt, formuleret kort og konkret på dansk. Du må gerne selv pege på et åbenlyst problem du ser i forløbet, men skriv kun det der kan begrundes i processen eller samtalen; opfind ingen tal.
+hoursPerMonth er kun for TIME: det nævnte tidsforbrug omregnet til timer pr. måned (1 uge = 4,33 uger/md, 1 arbejdsdag = 7,4 timer, ca. 21 arbejdsdage/md), når både varighed og hyppighed er sagt. Mangler en af dem, så sæt null og lad teksten stå — gæt aldrig. For alle andre slags er hoursPerMonth null. Eksisterende TIME-punkter beholder deres hoursPerMonth, medmindre brugeren retter tallene.
 
 Regler:
 - Ændr kun det brugeren beder om. Bevar alt andet præcis, også id'er.
@@ -156,10 +198,41 @@ Regler:
 - Start-, slut- og timerhændelser ligger i svimlanen hos den aktør der starter, afslutter eller venter (fx starthændelsen hos den der modtager ordren, timeren "Hver onsdag" hos den der handler på den). Brug kun den grundlæggende svimlane (lane "") når processen slet ingen aktører har endnu.
 - Er start- eller sluthændelsen stadig den generiske "Start"/"Slut", så giv den et konkret navn så snart forløbet er kendt (fx "Planen for ugen er kendt", "Antallet er rettet"). Har forløbet flere udfald, så giv hvert udfald sin egen sluthændelse.
 - Hver svimlane i lanes skal have mindst ét skridt; lanes-listen bestemmer kolonnernes rækkefølge fra venstre mod højre.
-- Et gyldigt diagram har mindst én START og én END, og alle skridt hænger sammen med pile.
-- Hvis brugeren kun spørger om noget eller er uklar, så svar/spørg ind i reply, sæt changed=false og udelad process.
-- Når du ændrer noget — også når du kun noterer et analysepunkt: sæt changed=true og returnér HELE processen i process (pools, lanes, steps, flows, findings og summary — en til tre sætninger på dansk der beskriver forløbet i ord).
+- Et gyldigt diagram har mindst én start (START eller TIMER_START) og én END, og alle skridt hænger sammen med pile.
+- Hvis brugeren kun spørger om noget eller er uklar, så svar/spørg ind i reply, sæt changed=false og udelad edits og process.
+- Når du ændrer noget — også når du kun noterer et analysepunkt — sæt changed=true og beskriv ændringen på én af to måder:
+  1. edits (det normale, når diagrammet allerede har skridt): en liste af rettelser der udføres i rækkefølge. Skriv KUN det der ændres — alt du ikke nævner forbliver som det er.
+     - set_step: opret eller erstat ét skridt (alle felter, også systems og data som de skal være bagefter). after er id på skridtet det skal stå efter i rækkefølgen; tom streng = bliv hvor det står (et nyt skridt uden after lægges sidst).
+     - remove_step: slet et skridt; pile til og fra det forsvinder, så husk set_flow for at forbinde forløbet igen.
+     - set_flow: opret en pil, eller ret etiket/art på pilen mellem from og to. remove_flow: slet pilen mellem from og to.
+     - set_lanes: hele listen af svimlaner i ny rækkefølge — kun når svimlaner tilføjes, fjernes, flyttes eller skifter pool (en ny aktør på et skridt får selv en svimlane sidst).
+     - set_pools: hele listen af ekstra pools, kun når den ændres.
+     - set_finding: opret eller erstat ét analysepunkt. remove_finding: slet et.
+     - set_summary: ny opsummering (en til tre sætninger på dansk der beskriver forløbet i ord) — tag den med når forløbet ændres.
+  2. process: HELE processen (pools, lanes, steps, flows, findings og summary) — kun når diagrammet er tomt, eller brugeren beder om at lave det om fra bunden. Brug aldrig både edits og process.
 - reply er kort, på dansk, i almindeligt forretningssprog: hvad du har ændret, eller dit svar. Ingen tekniske id'er i reply.`;
+
+/*
+  Interview-tilstand (knappen "Interview" i chatten): agenten interviewer
+  efter procesdiagram-skillens interviewguide, som læses ordret fra skillen
+  (lib/interview-guide.ts). Rammen her siger kun, hvordan guiden bruges i
+  appen — hvornår diagrammet tegnes, og hvordan overleveringen bliver til
+  skridt, pile og analysepunkter.
+*/
+const INTERVIEW = `
+
+INTERVIEW-TILSTAND
+Konsulenten har trykket "Interview": du interviewer nu den, der kender processen, præcis som interviewguiden nedenfor beskriver (samme interview som procesdiagram-skillen). Guiden bestemmer samtalen; reglerne ovenfor gælder stadig for, hvordan diagrammet skrives.
+- Åbningsspørgsmålet er allerede stillet — det er agentens første besked i interviewet. Gå videre med at sortere svaret, stille opfølgende spørgsmål (højst tre-fire ad gangen, nummereret), validere og til sidst give overleveringen (tabellen og en kort opsummering) i reply.
+- Tegn ikke diagrammet undervejs: changed=false, indtil den interviewede har bekræftet overleveringen. Analysepunkter (problemer, ønsker, ideer, tidsforbrug) må gerne noteres løbende med set_finding.
+- Når overleveringen er bekræftet, så tegn diagrammet i samme svar og sæt interviewDone=true: process med hele forløbet, hvis diagrammet er tomt, eller hvis den interviewede har sagt ja til, at det nye erstatter det eksisterende — ellers edits. Sig kort i reply, at diagrammet er tegnet.
+- Har diagrammet allerede skridt, så spørg i valideringen, om det nye skal erstatte det eksisterende eller supplere det.
+- Oversæt overleveringen: det fælles pool er underprocessen selv, så kun andre parter bliver pools; bane → lanes; type start → START (TIMER_START ved et fast tidspunkt), aktivitet → TASK, beslutning → DECISION (PARALLEL, INCLUSIVE eller EVENT_GATEWAY når udfaldene sker samtidig, kan være flere, eller afgøres af den første hændelse), tidshændelse → TIMER, slut → END; System → systems; Input/Output → data; Udfald og veje → flows med svaret som label; Tid og Note → findings (TIME, PROBLEM, WISH eller IDEA), når de er nævnt.
+- Beder den interviewede om at stoppe interviewet, så sæt interviewDone=true uden at tegne.
+- Tabeller i reply skrives som Markdown-tabel (linjer der starter med |), så chatten kan vise dem.
+
+INTERVIEWGUIDE (fra procesdiagram-skillen)
+`;
 
 function norm(s: string) {
   return s.trim().toLowerCase();
@@ -211,7 +284,13 @@ function describe(state: State) {
         kind: l.actorSystemId ? "system" : "role",
         pool: sp.pools.find((p) => p.id === l.poolId)?.name ?? "",
       })),
-    findings: sp.findings.map((f) => ({ id: f.id, kind: f.kind, text: f.text, step: f.stepId ?? "" })),
+    findings: sp.findings.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      text: f.text,
+      step: f.stepId ?? "",
+      hoursPerMonth: f.hoursPerMonth,
+    })),
     steps: sp.steps.map((s) => ({
       id: s.id,
       type: s.stepType,
@@ -239,7 +318,9 @@ function describe(state: State) {
 
 export async function runProcessAgent(subProcessId: string): Promise<{ reply: string; changed: boolean }> {
   const state = await loadState(subProcessId);
-  const history = state.sp.chatMessages.slice(-24);
+  const interview = state.sp.interviewActive;
+  // Et interview skal kunne huske hele samtalen, fra åbningsspørgsmålet.
+  const history = state.sp.chatMessages.slice(interview ? -80 : -24);
 
   const prompt = [
     "Processen som den ser ud nu:",
@@ -250,17 +331,85 @@ export async function runProcessAgent(subProcessId: string): Promise<{ reply: st
   ].join("\n");
 
   const result = await generateJson<AgentResult>({
-    system: SYSTEM,
+    system: interview ? SYSTEM + INTERVIEW + interviewGuide() : SYSTEM,
     prompt,
     schema: SCHEMA as unknown as Record<string, unknown>,
     effort: "medium",
   });
 
-  if (result.changed && result.process) {
-    await applyProcess(state, result.process);
-    return { reply: result.reply, changed: true };
+  const next = result.process
+    ? result.process
+    : result.edits?.length
+      ? applyEdits(describe(state) as unknown as AgentProcess, result.edits)
+      : null;
+  const changed = !!(result.changed && next);
+  if (changed) await applyProcess(state, next!);
+  if (interview && result.interviewDone) {
+    await db.subProcess.update({ where: { id: subProcessId }, data: { interviewActive: false } });
   }
-  return { reply: result.reply, changed: false };
+  return { reply: result.reply, changed };
+}
+
+/* Lægger agentens rettelser oven på den nuværende udgave og giver hele den nye udgave tilbage. */
+function applyEdits(current: AgentProcess, edits: AgentEdit[]): AgentProcess {
+  const next: AgentProcess = structuredClone({
+    summary: current.summary,
+    pools: current.pools,
+    lanes: current.lanes,
+    steps: current.steps,
+    flows: current.flows,
+    findings: current.findings,
+  });
+  const sameFlow = (f: AgentFlow, from: string, to: string) => f.from === from && f.to === to;
+
+  for (const e of edits) {
+    switch (e.op) {
+      case "set_step": {
+        const { op: _op, after, ...step } = e;
+        const at = next.steps.findIndex((s) => s.id === step.id);
+        if (at >= 0) next.steps.splice(at, 1);
+        const afterAt = after ? next.steps.findIndex((s) => s.id === after) : -1;
+        if (afterAt >= 0) next.steps.splice(afterAt + 1, 0, step);
+        else if (at >= 0) next.steps.splice(at, 0, step);
+        else next.steps.push(step);
+        break;
+      }
+      case "remove_step":
+        next.steps = next.steps.filter((s) => s.id !== e.id);
+        next.flows = next.flows.filter((f) => f.from !== e.id && f.to !== e.id);
+        break;
+      case "set_flow": {
+        const { op: _op, ...flow } = e;
+        const at = next.flows.findIndex((f) => sameFlow(f, flow.from, flow.to));
+        if (at >= 0) next.flows[at] = flow;
+        else next.flows.push(flow);
+        break;
+      }
+      case "remove_flow":
+        next.flows = next.flows.filter((f) => !sameFlow(f, e.from, e.to));
+        break;
+      case "set_lanes":
+        next.lanes = e.lanes;
+        break;
+      case "set_pools":
+        next.pools = e.pools;
+        break;
+      case "set_finding": {
+        const { op: _op, ...finding } = e;
+        const at = next.findings.findIndex((f) => f.id === finding.id);
+        if (at >= 0) next.findings[at] = finding;
+        else next.findings.push(finding);
+        break;
+      }
+      case "remove_finding":
+        next.findings = next.findings.filter((f) => f.id !== e.id);
+        break;
+      case "set_summary":
+        next.summary = e.text;
+        break;
+    }
+  }
+  return next;
 }
 
 async function applyProcess(state: State, next: AgentProcess) {
@@ -464,11 +613,21 @@ async function applyProcess(state: State, next: AgentProcess) {
   const keptFindingIds = new Set<string>();
   const orderByKind = new Map<string, number>();
   for (const f of next.findings ?? []) {
-    const kind = ["PROBLEM", "WISH", "IDEA"].includes(f.kind) ? f.kind : "PROBLEM";
+    const kind = FINDING_KINDS.includes(f.kind) ? f.kind : "PROBLEM";
     if (!f.text.trim()) continue;
     const sortOrder = orderByKind.get(kind) ?? 0;
     orderByKind.set(kind, sortOrder + 1);
-    const data = { kind, text: f.text.trim(), stepId: (f.step && idMap.get(f.step)) || null, sortOrder };
+    const hours = f.hoursPerMonth;
+    const data = {
+      kind,
+      text: f.text.trim(),
+      stepId: (f.step && idMap.get(f.step)) || null,
+      hoursPerMonth:
+        kind === "TIME" && typeof hours === "number" && Number.isFinite(hours) && hours > 0
+          ? Math.round(hours * 10) / 10
+          : null,
+      sortOrder,
+    };
     if (existingFindingIds.has(f.id) && !keptFindingIds.has(f.id)) {
       await db.processFinding.update({ where: { id: f.id }, data });
       keptFindingIds.add(f.id);

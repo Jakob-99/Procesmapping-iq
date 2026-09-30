@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { isStartOrEnd } from "@/lib/domain";
 import { requireSessionUser } from "@/lib/session";
 import { ProcessArea } from "@/components/ProcessArea";
 import { SetBreadcrumb } from "@/components/BreadcrumbContext";
@@ -57,7 +58,7 @@ export default async function ProcessPage({
           groupId: sp.groupId,
           assigneeId: sp.assigneeId,
           // "Tegnet" = der er mere end blot start og slut i diagrammet.
-          hasDiagram: sp.steps.some((s) => s.stepType !== "START" && s.stepType !== "END"),
+          hasDiagram: sp.steps.some((s) => !isStartOrEnd(s.stepType)),
         }))}
         users={users}
       />

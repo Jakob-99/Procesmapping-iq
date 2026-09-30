@@ -5,8 +5,8 @@
 #   powershell -ExecutionPolicy Bypass -File scripts/visio/build-stencil-template.ps1 -Stencil "<sti til .vssx>" -Out "<sti>\stencil-ref.vsdx"
 #   npx tsx scripts/visio/extract-stencil-template.ts "<sti>\stencil-ref.vsdx"
 #
-# Visio lægger én figur af hver slags på en side (start, slut, timer,
-# aktivitet i fire højder, de fire gateways, sekvens- og beskedpil) og
+# Visio lægger én figur af hver slags på en side (start, start med ur, slut,
+# timer, aktivitet i fire højder, de fire gateways, sekvens- og beskedpil) og
 # gemmer. Figurerne er formelstyrede grupper, og Visio regner ikke
 # formlerne om når en fil åbnes — derfor skal de ligge i filen præcis som
 # Visio selv gemmer dem. Bagefter trækker extract-stencil-template.ts
@@ -41,14 +41,19 @@ try {
   $end = $pg.Drop($M["Start-End"], 2, 9); $end.Text = "Slut"; $end.NameU = "REF_END"
   $end.CellsU("Prop.BpmnEventType").FormulaU = '"Slut"'
   $timer = $pg.Drop($M["Time event"], 3, 9); $timer.NameU = "REF_TIMER"
+  # Start på et fast tidspunkt: stencilets egen start med udløseren "Timer" (uret i ringen).
+  $ts = $pg.Drop($M["Start-End"], 4, 9); $ts.Text = "Start"; $ts.NameU = "REF_START_TIMER"
+  $ts.CellsU("Prop.BpmnTriggerOrResult").FormulaU = '"Timer"'
   Step "start/slut/timer"
 
-  # Aktiviteter i fire højder (bredden er stencilets egen).
+  # Aktiviteter i fire højder, 150 px brede som i appen — med stencilets
+  # egen bredde (0,98") brydes lange danske ord midt i.
   $x = 1
   foreach ($h in 76, 100, 124, 148) {
     $a = $pg.Drop($M["Activity"], $x, 6); $a.Text = "Aktivitet"; $a.NameU = "REF_TASK_$h"
+    $a.CellsU("Width").ResultIU = 150 / 96
     $a.CellsU("Height").ResultIU = $h / 96
-    $x += 1.5
+    $x += 2
   }
   Step "aktiviteter"
 

@@ -21,7 +21,7 @@ import { StepDetailsPanel } from "./StepDetailsPanel";
 import { LaneEditor } from "./LaneEditor";
 import { Badge, type Tone } from "./ui";
 import { setSubProcessStatus } from "@/app/(customer)/processes/[processId]/[subId]/actions";
-import { SUBPROCESS_STATUS } from "@/lib/domain";
+import { SUBPROCESS_STATUS, isStartOrEnd } from "@/lib/domain";
 
 /*
   Underprocessens arbejdsflade: diagrammet i midten (samme notation som
@@ -88,6 +88,7 @@ export function SubProcessWorkspace({
     summary: string | null;
     assigneeId: string | null;
     assignee: { name: string; title: string | null } | null;
+    interviewActive: boolean;
   };
   status: string;
   statusLabel: string;
@@ -191,7 +192,7 @@ export function SubProcessWorkspace({
     setPanel("detaljer");
   }
 
-  const taskSteps = steps.filter((s) => s.stepType !== "START" && s.stepType !== "END");
+  const taskSteps = steps.filter((s) => !isStartOrEnd(s.stepType));
 
   return (
     <div className="relative flex h-full flex-col bg-(--color-raised)">
@@ -392,7 +393,13 @@ export function SubProcessWorkspace({
       )}
       </div>
 
-      <ProcessChat processId={processId} subProcessId={sp.id} messages={chat} hasSteps={taskSteps.length > 0} />
+      <ProcessChat
+        processId={processId}
+        subProcessId={sp.id}
+        messages={chat}
+        hasSteps={taskSteps.length > 0}
+        interviewActive={sp.interviewActive}
+      />
       </div>
 
       {lanePopover && (

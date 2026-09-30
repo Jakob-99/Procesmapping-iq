@@ -115,6 +115,7 @@ export default async function SubProcessPage({
           summary: sp.summary,
           assigneeId: sp.assigneeId,
           assignee: sp.assignee,
+          interviewActive: sp.interviewActive,
         }}
         status={sp.status}
         statusLabel={st.label}
@@ -177,7 +178,13 @@ export default async function SubProcessPage({
           flows: sp.flows.map((f) => ({ from: f.fromStepId, to: f.toStepId, label: f.label, kind: f.kind })),
         }}
         systemCards={systemCards}
-        findings={sp.findings.map((f) => ({ id: f.id, kind: f.kind, text: f.text, stepId: f.stepId }))}
+        findings={sp.findings.map((f) => ({
+          id: f.id,
+          kind: f.kind,
+          text: f.text,
+          stepId: f.stepId,
+          hoursPerMonth: f.hoursPerMonth,
+        }))}
         notes={sp.notes.map((n) => ({ id: n.id, text: n.text, x: n.x, y: n.y }))}
         chat={sp.chatMessages.map((m) => ({ id: m.id, role: m.role, content: m.content, userName: m.userName }))}
       />
